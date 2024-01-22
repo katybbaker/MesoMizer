@@ -5,10 +5,10 @@ date: "2023-01-24"
 ---
 
 ```{r}
-install.packages("mizer")
-install.packages("remotes")
-remotes::install_github("sizespectrum/mizerExperimental")
-remotes::install_github("sizespectrum/mizerExperimental", ref = "tuneMR")
+#install.packages("mizer")
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/mizerExperimental")
+#remotes::install_github("sizespectrum/mizerExperimental", ref = "tuneMR")
 library(mizerExperimental)
 library(tidyverse)
 library(dplyr)
@@ -58,7 +58,13 @@ knitr::kable(mesoInter, caption = "species' interactions")
 meso_p <- newMultispeciesParams(mesoExample, mesoInter, w_pp_cutoff = 1, )
 species_params(meso_p)
 
+mini_proj_params <- species_params(meso_p)
+
+write.csv(mini_proj_params , "mini_project_params.csv")
+
 ```
+
+
 ```{r}
 meso_p <- steady(meso_p)
 
