@@ -1,0 +1,314 @@
+---
+title: "01_MesoMizer_QMS_miniproject"
+output: html_document
+date: "2023-01-24"
+---
+
+```{r}
+install.packages("mizer")
+install.packages("remotes")
+remotes::install_github("sizespectrum/mizerExperimental")
+remotes::install_github("sizespectrum/mizerExperimental", ref = "tuneMR")
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+
+
+#Parameter description--------------------------------------------------
+
+```{r}
+
+param_description <- data.frame("parameter" = c("w_inf","w_mat","beta","sigma","R_max","k_vb","l25","l50",
+                                                "a","b","catchability","h","k","ks","z0","gamma","w_mat25","erepro"),
+                                "description" = c("asymptotic weigth",
+                                                  "maturation weight (determines when 50% of the population has matured using a sigmoid function)",
+                                                  "preferred predator/prey mass ratio","width of the feeding kernel",
+                                                  "Beverton-Holt density dependence parameter",
+                                                  "von Bertalanffy growth parameter","length at 25% catch","length at 50% catch",
+                                                  "coefficient for age to size conversion",
+                                                  "constant for age to size conversion","fisheries efficiency","maximum intake rate","metabolism constant",
+                                                  "metabolism coefficient","background mortality coefficient",
+                                                  "search volume (obtained from beta and sigma)",
+                                                  "weight at which 25% of individuals are mature","reproductive output scalar")
+)
+
+knitr::kable(param_description, caption = "parameters' description")
+```
+
+## MesoMizer small example - interaction maxtrix based on likelihood of encounter in epipelagic zone only 
+
+```{r}
+mesoExample <- data.frame("species" = c("G. braueri", "K. anderssoni", "E. antarctica", "T. macrura", "S. arcticus"),
+                           "w_inf" = c(26.6, 13.8, 26.78, 0.318, 0.97), 
+                           "k_vb" = c(0.3, 0.7, 0.2, 0.43, 0.8))
+                           #"beta" = c(200,200)) #preferred size of prey...small means close to their size
+knitr::kable(mesoExample, caption = "species' parameters")
+
+mesoInter <- matrix(c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1), ncol = 5, 
+                     dimnames = list(mesoExample$species, mesoExample$species))
+knitr::kable(mesoInter, caption = "species' interactions")
+
+
+```
+```{r}
+meso_p <- newMultispeciesParams(mesoExample, mesoInter, w_pp_cutoff = 1, )
+species_params(meso_p)
+
+```
+```{r}
+meso_p <- steady(meso_p)
+
+plotSpectra(meso_p, power = 1)
+plotGrowthCurves(meso_p, species_panel = T)
+plotFeedingLevel(meso_p , include_critical = T)
+```
+```{r}
+plotDiet(meso_p,species = "G. braueri")
+plotDiet(meso_p,species = "K. anderssoni")
+plotDiet(meso_p,species = "E. antarctica")
+plotDiet(meso_p,species = "S. arcticus")
+plotDiet(meso_p,species = "T. macrura")
+```
+```{r}
+getEReproAndGrowth(meso_p) #calculates the energy rate (g/year) available for reproduction and growth after metabolism and movement
+# so we want to know 1- getEReproAndGrowth - wouldn't this just be getMetabolicRate()?
+getEGrowth(meso_p) # calculates the energy rate (g/year) available by species and size for growth after metabolism, movement and reproduction have been accounted for
+getMetabolicRate(meso_p) #sets the rate at which energy is used for metabolism and activity
+
+
+plotEnergyBudget(meso_p)
+```
+
+#Projection in time----------------------------------------------------------
+
+```{r}
+
+sim_meso <- project(meso_p, t_max = 500)
+
+plotBiomass(sim_meso)
+plotDiet(sim_meso@params)
+
+```
+#Calibration with empiracle data--------------------------------------------
+
+```{r}
+# meso_p@species_params$biomass_observed< <- empirical biomass data per species in g
+```
+
+
+#Setting up Rmax-----------------------------------------------------------
+
+```{r}
+meso_p@species_params$R_max <- meso_p@resource_params$kappa * meso_p@species_params$w_inf^-1
+
+meso_p2 <- steady(meso_p)
+
+sim2 <- project(meso_p2, t_max = 500)
+plotBiomass(sim2)
+meso_p3 <- meso_p2
+meso_p3@initial_n <- sim2@n[dim(sim2@n)[1],,] # selecting biomass of all species and sizes at the last time step
+```
+```{r}
+plotDiet(sim2@params)
+plotFeedingLevel(sim2)
+plotGrowthCurves(sim2, species_panel = T)
+```
+#Cutting short resource spectrum---------------------------------------------
+To change diets: shortcut resources, change interaction matrix, change interaction resource
+
+```{r}
+# option 1 doesn't work
+resource_params(meso_p3)$w_pp_cutoff <- 1
+# option 2 doesn't work
+meso_p3 <- mizer::setResource(meso_p3, w_pp_cutoff = 1)
+sim3 <- project(meso_p3)
+plotBiomass(sim3)
+plotSpectra(sim3)
+```
+#Metabolism loss---------------------------------------------------------------
+
+```{r}
+plotEnergyBudget # looking at source code
+res <- plotEnergyBudget(meso_p3, return_data = T) # return dataframe for plot
+meso_p3@metab[1:3,70:80] #g/year per size bin (amount of abundance per size bin) - rate need to be multiplied by n    (sim@n)
+meso_p3@metab[4:5,40:50]
+
+#find metabolic rate (g/year)at each size..
+metab_size_f <- meso_p3@metab[1:3,70:100]*sim3@n[1,1:3,70:100]/365 # this should be metabolic loss - g/day of biomass per size....
+metab_size_crus <- meso_p3@metab[4:5,40:70]*sim3@n[1,4:5,40:70]/365
+
+#find metabolic loss as % of weight at each size class
+#metab_size_f <- meso_p3@metab[1:3,70:100]/meso_p3@w[1:3,70:100] # this should be metabolic loss - g/day of biomass per size....
+#metab_size_crus <- meso_p3@metab[4:5,40:70]*sim3@n[1,4:5,40:70]/365
+
+```
+
+#Data wrangle-----------------------------------------------------------------
+
+```{r}
+
+#fish
+metab_size_f <- as.data.frame(metab_size_f)
+metab_size_f <- metab_size_f %>% 
+  rownames_to_column(var = "Species")
+metab_size_f <- metab_size_f %>%
+  pivot_longer(!Species, names_to = "size", values_to = "metab")
+
+#crustaceans
+metab_size_crus <- as.data.frame(metab_size_crus)
+metab_size_crus <- metab_size_crus %>% 
+  rownames_to_column(var = "Species")
+metab_size_crus <- metab_size_crus %>%
+  pivot_longer(!Species, names_to = "size", values_to = "metab")
+
+
+
+```
+
+
+#Plot Metabolic loss---------------------------------------------------------
+
+```{r}
+
+
+ggplot(data=metab_size_f, aes(x=as.numeric(size), y=metab, group=Species)) +
+  xlab("Size (g)") +
+  ylab("Metabolic loss (g/day)")+
+  #scale_x_continuous(breaks = seq(0,2,0.2)) +
+  geom_line(aes(color = Species))
+
+ggplot(data=metab_size_crus, aes(x=as.numeric(size), y=metab, group=Species)) +
+   xlab("Size (g)") +
+  ylab("Metabolic loss (g/day)")+
+  scale_x_continuous(breaks = seq(0,2,0.2)) +
+  geom_line(aes(color = Species))
+
+
+```
+
+
+# Fishing mortality
+
+
+```{r}
+plotFMort(meso_p3) #"knife edge" 
+```
+
+```{r}
+knitr::kable(gear_params(meso_p3), caption = "gear parameters",row.names = F,digits = 12)
+```
+
+```{r}
+gear_params(meso_p3)$gear <- c("super_trawler")
+gear_params(meso_p3)$knife_edge_size <- 0.5
+gear_params(meso_p3)$catchability <- 1
+```
+
+
+
+
+```{r}
+
+sim_light <- project(meso_p3, effort = 0.5, t_max = 100)
+sim_heavy <- project(meso_p3, effort = 1.5, t_max = 100)
+
+```
+
+
+
+
+```{r}
+# assuming sim0 is steady state, sim1 is some kind of variation such as fishing
+sim0 = sim_light
+sim1 = sim_heavy
+fish_sim <- apply(N(sim1)[(dim(N(sim1))[1]-5):(dim(N(sim1))[1]),,],2:3,mean)
+unfish_sim <- apply(N(sim0)[(dim(N(sim0))[1]-5):(dim(N(sim0))[1]),,],2:3,mean)
+
+relative_n <- melt((fish_sim - unfish_sim) / (fish_sim + unfish_sim)) 
+
+colnames(relative_n)[1] <- "Species"
+legend_levels <- intersect(names(sim0@params@linecolour), relative_n$Species)
+ggplot(relative_n) +
+  geom_line(aes(x = w, y = value, colour = Species), size = 1) +
+  scale_x_continuous(trans = "log10", name = "Weight [g]") +
+  scale_y_continuous(name = "Relative difference") +
+  scale_color_manual(values = sim0@params@linecolour[legend_levels]) +
+  geom_hline(yintercept = 0, linewidth = 1, colour="dark grey", size=0.75)
+
+```
+
+```{r}
+plotSpectra2(object1 = sim0, object2 = sim1, name1 =  "light fishing", name2 =  "heavy fishing", 
+             total = TRUE, power = 2, ylim = c(1e-8, NA), wlim = c(1e-3, NA))
+```
+
+
+
+```{r}
+biomass<-rbind(getBiomass(sim_light)[100,],getBiomass(sim_heavy)[100,])
+row.names(biomass)<-c("light","heavy")
+knitr::kable(biomass, caption = "Biomass")
+```
+
+#Metabolic loss after fishing--------------------------------------------------
+
+
+Data wrangle
+
+```{r}
+
+metab_size_f_sim1 <- meso_p3@metab[1:3,70:100]*sim1@n[1,1:3,70:100]/365 # this should be metabolic loss - g/day of biomass per size....
+metab_size_crus_sim1 <- meso_p3@metab[4:5,40:70]*sim1@n[1,4:5,40:70]/365
+
+#fish
+metab_size_f_sim1 <- as.data.frame(metab_size_f_sim1)
+metab_size_f_sim1 <- metab_size_f_sim1 %>% 
+  rownames_to_column(var = "Species")
+metab_size_f_sim1 <- metab_size_f_sim1%>%
+  pivot_longer(!Species, names_to = "size", values_to = "metab2")
+
+#crustaceans
+metab_size_crus_sim1 <- as.data.frame(metab_size_crus_sim1)
+metab_size_crus_sim1<- metab_size_crus_sim1 %>% 
+  rownames_to_column(var = "Species")
+metab_size_crus_sim1 <- metab_size_crus_sim1 %>%
+  pivot_longer(!Species, names_to = "size", values_to = "metab2")
+
+
+```
+
+
+
+```{r}
+
+ggplot(data=metab_size_f_sim1, aes(x=size, y=metab2, group=Species)) +
+  geom_line(aes(color = Species))
+
+ggplot(data=metab_size_crus_sim1, aes(x=size, y=metab2, group=Species)) +
+  geom_line(aes(color = Species))
+
+```
+#Join dataframes--------------------------------------------------------------
+
+```{r}
+all_sim <- metab_size_f %>%
+    left_join(metab_size_f_sim1, by='Species') 
+```
+
+```{r}
+
+  ggplot(data = all_sim, aes(x = size.x, group = Species)) +
+  geom_line(aes(y = metab, group = Species)) +
+  geom_line(aes(y = metab2, group = Species))
+
+
+```
+
+
+
+
+
