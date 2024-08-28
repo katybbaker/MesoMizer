@@ -1,0 +1,714 @@
+---
+title: "MesoMizer_description"
+output: html_document
+date: "2024-07-16"
+author:
+---
+
+In this document we describe MesoMizer by building upon the MizerShelf model description created by Gustav Delius (Text in quotes taken directly from document).
+
+The model consists of five components:
+
+1) a collection of [species],
+2) [carrion],
+3) [detritus],
+4) [Carbon Injection Potential (CIP)] and 
+5) [DIC pools]
+
+
+# 1 Species
+
+
+We model 13 species across 3 depth strata: Epipelagic (0-200 m depth), Upper mesopelagic (200 - 400 m depth) and Lower mesopelagic (400 - 1000 m depth). For each species and depth strata, we have some estimates of observed biomass in g m-2. We chose to model depth strata separately to inform our species interaction matrix and to determine how much of each biomass is transported below the epipelagic zone (discussed later). "While the observed biomasses of the species are not directly model parameters, we have used them to choose the reproduction parameters so that the steady state biomasses in the model agree with these observations". 
+"For some species the total biomass above a certain cutoff size has been observed. Table 1 gives the observed biomass per square meter in grams and the cutoff size in grams. Individuals smaller than the cutoff size were not observable by the method used". 
+
+```{r}
+sp_1 <- 
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "Total biomass" = c( 1.714941e+11,1.561756e+11,3.815464e+10,6.383045e+10,4.760506e+11,2.213141e+10,1.499316e+11,5.021544e+10,1.675264e+11,3.649106e+12,4.251151e+09,3.002268e+13,7.149292e+10), 
+    "Night epi" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), #need to fill these in and remove total biomass column....actually let's just use abundance to calibrate
+    "Night upper meso" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "Night lower meso" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "Cutoff size" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(sp_1, caption = "Table 1: Observed biomasses")
+```
+
+
+### 1.1 Size-spectrum dynamics
+
+"The Mizer model assumes that, to a first approximation, an individual can be characterized by its weight $w$
+and its species number $i$ only.
+
+The aim of the model is to calculate the size spectrum $N_i(w)$, which is the *density* of individuals of species $i$ and size $w$. The number of individuals in a size range is obtained from the density by integrating over the size range, such that $\int_w^{w+dw}N_i(w)dw$ is the number of individuals of species $i$ in the size interval $[w,w+dw]$. In other words: the number of individuals in a size range is the area under the number density $N_i(w)$.
+
+The time evolution of the number density $N_i(w)$ is described by the McKendrick-von Foerster equation, which is a transport equation describing the transport of biomass from small to large individuals, with an additional loss term due to fish mortality:"
+
+$$
+  \frac{\partial N_i(w)}{\partial t} + \frac{\partial g_i(w) N_i(w)}{\partial w} 
+  = -\mu_i(w) N_i(w).
+$$
+
+The individual growth rate $g_i(w)$ is described below in the [Growth](#growth) section and the mortality rate $\mu_i(w)$ is described in the [Mortality](#mortality) section. These rates depend on the density of other fish of other sizes, as well as the carrion and detritus biomasses, making the size-spectrum dynamics non-linear and non-local in very interesting ways. The resulting effects are too complicated to disentangle by pure thought. This is where simulations with the mizer package come in.
+
+There is no need to understand the mathematical notation used in the McKendrick-von Foerster equation to understand its origin: it just says that the rate at which the number of fish in a size bracket increases is the rate at which fish grow into the size bracket from a smaller size minus the rate at which fish grow out of it to a larger size minus the rate at which the fish in the size bracket die.
+
+For the smallest size class, instead of a rate of growth into the size class there is a rate of reproduction of new individuals into that size class. This reproduction will be described below in the [Reproduction](#reproduction) section.
+
+
+### 1.2 Growth
+
+"Consumers can only grow by consuming prey (including possibly carrion and detritus), discounting
+the losses due to metabolic processes. Predation includes a model for the predatorprey encounter rate
+and a model for the rate of consumption. Taking into account the rate of metabolic losses, the resulting energy intake can be partitioned in the model as energy allocated to reproduction and energy allocated
+to somatic growth" 
+
+##### 1.2.1 Predator-prey encounter rate
+
+"The rate $E_{i}(w)$ at which a predator of species $i$ and weight $w$ encounters food (mass per time) is obtained by summing over all prey species and integrating over all prey sizes $w_p$, weighted by the selectivity factors described below and (where relevant) adding the encounter rates $E_{C.i}$ of carrion and $E_{D.i}$ of detritus: 
+
+$$
+  E_{i}(w) = \gamma_i(w) \int \sum_{j} \theta_{ij} N_j(w_p)
+  \phi_i(w,w_p) w_p \, dw_p + E_{C.i}(w) + E_{D.i}(w).
+$$
+
+"The encounter rates for [carrion](#carrion-consumption) and [detritus](#detritus-consumption) will be described later.
+
+The overall prefactor $\gamma_i(w)$ sets the predation power of the predator. It could be interpreted as a search volume or as an attack rate. By default it is assumed to scale allometrically as $\gamma_i(w) = \gamma_i\, w^{3/4}.$ In order for $E_i(w)$ to have units of grams per year, the prefactor $\gamma_i$ has to have a unit of $\text{grams}^{-3/4}$ per year.
+
+The $\theta_{ij}$ matrix sets the interaction strength between predator species $i$ prey species $j$.
+
+The size selectivity is encoded in the predation kernel $\phi_i(w,w_p)$. For most predator species we use the lognormal predation kernel given as" 
+
+$$
+\phi_i(w, w_p) = 
+\exp \left[ \frac{-(\ln(w / w_p / \beta_i))^2}{2\sigma_i^2} \right]
+$$
+"if $w/w_p$ is larger than 1 and zero otherwise. Here $\beta_i$ is the preferred predator-prey mass ratio and $\sigma_i$ determines the width of the kernel."
+
+
+
+MesoMizer - Parameter values (scenario 1 - synchronous migrations)
+
+The predator/prey interaction matrix has entries equal to either 0 (if the species never occupy the same depth strata; or feeding preferences imply the species cannot interact), 0.5 if the species interact for half a day (i.e. one migratory species and one resident species), 0.58 if a migratory species with lower mesopelgic daytime residence passes upper mesopelagic residents during their nighttime asent. Here we assume lmeso migrators take 1 hour to swim to surface, therefore in theory they interact with upper mesopelagic residents for 2 hours per day. 1 if species are residents of the same depth strata or have the same migratory behavior, thus interacting the entire modeled time. Migration behaviour parameters were estimated using literature values, observations and results from a stable isotope analysis, each equating to different interaction matrices. We ran these additional interaction matrices to test sensitivity. See tables xx - xxx .Table 3 represents an idealised matrix based on the literature and assumes synchronous migrations of entire populations:
+
+```{r}
+sp_1_inter <- matrix (c(1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0.5,	0.5,	1,	0.5,	0.5,	0.5,	1,	1,	0.5,	0.5,	0.5,	0.5,	0.5,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+0,	0,	0,	0.5,	1,	1,	0.58,	0.58,	0,	0.5,	0,	0.5,	0,
+0,	0,	0,	0.5,	1,	1,	0.58,	0.58,	0,	0.5,	0,	0.5,	0,
+0.5,	0.5,	0.5,	0.08,	0.58,	0.58,	1,	1,	0.5,	0.08,	0.5,	0.08,	0.5,
+0.5,	0.5,	0.5,	0.08,	0.58,	0.58,	1,	1,	0.5,	0.08,	0.5,	0.08,	0.5,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1
+
+), ncol = 13,
+                     dimnames = list(sp_1$species, sp_1$species) )
+
+knitr::kable(sp_1_inter, caption = "species' interactions")
+```
+
+```{r}
+predation_kernal <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "beta" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), #we may need to rethink this... perhaps a separate function that dynamically calculates carbon weight for each size
+    "Sigma" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "gamma" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(predation_kernal, caption = "Table 4: Parameters for lognormal predation kernals")
+```
+
+##### 1.2.2 Consumption
+
+"The encountered food is consumed subject to a standard Holling functional response type II to represent satiation. This determines the *feeding level* $f_i(w)$, which is a dimensionless number between 0 (no food) and 1 (fully satiated) so that $1-f_i(w)$ is the proportion of the encountered food that is consumed. The feeding level is given by
+
+$$
+  f_i(w) = \frac{E_i(w)}{E_i(w) + h_i(w)},
+$$
+
+where $h_i(w)$ is the maximum consumption rate of a predator of species $i$ and weight $w$. By default we assume an allometric form $h_i(w) = h_i\, w^n$ with $n=0.7$. The unit of the coefficients $h_i$ are $\text{grams}^{1-n}$ per year."
+
+"The rate at which food is consumed by a predator of species $i$ and weight $w$ is then 
+$$
+(1-f_i(w))E_{i}(w)=f_i(w)\, h_i(w).
+$$
+Only a proportion $\alpha_i$ of this consumed biomass is retained, while a proportion $1-\alpha_i$ is expelled in the form of feces, which contribute to the detritus."
+
+
+Parameter values
+
+"The values for the coefficients $h_i$ in the maximum consumption rates were chosen so that the feeding level that fish experience has a reasonable value with fish being neither too starved nor totally satiated."
+
+```{r}
+consumption_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "h" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "alpha" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "n" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(consumption_parameters, caption = "Table 5: Consumption parameters")
+```
+
+
+
+##### 1.2.3 Metabolic losses
+
+"Some of the food consumed is used to fuel the needs for metabolism, activity and movement, at a rate $\mathtt{metab}_i(w)$. By default this is made up out of standard metabolism, scaling with exponent $p$, and loss due to activity and movement, scaling with exponent $1$: 
+$$
+\mathtt{metab}_i(w) = k_{s.i}\,w^p + k_i\,w.
+$$
+The units of the coefficients $k_{s.i}$ are $\text{grams}^{1-p}$ per year and the units of the $k_i$ is grams per year.
+
+
+
+In MesoMizer we want to know the metabolic loss term in units of carbon by using: (make this new header?)
+
+$$
+
+RC = \mathtt{metab}_i(w) * RQ *(12/22.4)
+
+$$
+
+Where RC is respired carbon (g C y-1), RQ is the respiratory quotient, 12 is the molar weight of carbon (g mol-1) and 22.4 is the volume of an ideal gas at standard pressure (mol L-1). Typical RQ values are: Carbohydrates = 1.0, Fats = 0.7 and Proteins = 0.8 (#ref). Using stable isotope results, we assigned herbivores an RQ of 1.0, Carnivores an RQ of 0.8 and omnivores an RQ of 0.9. 
+
+In MesoMizer RC measured in g C per year is tracked and equates to the DIC injected due to respiration. This DIC will be combine with the POC values from detritus and carrion to give us a "Carbon Injection potential" (CIP) in g C year-1. (discussed later)
+
+Parameter values
+
+```{r}
+
+metabolism_parameters <- #need to make sure k values reflect oxygen consumption rates per year
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "ks" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "p" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "k" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "RQ" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(metabolism_parameters, caption = "Table 6: Metabolism parameters")
+```
+
+The remaining energy, if any, is then available for growth and reproduction, at the rate "
+$$
+  E_{r.i}(w) = \max(0, \alpha_i f_i(w)\, h_i(w) - \mathtt{metab}_i(w))
+$$
+
+
+
+
+##### 1.2.4 Investment into reproduction
+
+A proportion $\psi_i(w)$ of the energy available for growth and reproduction is used for reproduction. This proportion changes from zero below the weight $w_{m.i}$ of maturation to one at the maximum weight $w_{max.i}$, where all available energy is used for reproduction. The expression is 
+$$ 
+\psi_i(w) = \begin{cases}
+\left[1+\left(\frac{w}{w_{mat}}\right)^{-U}\right]^{-1}
+\left(\frac{w}{w_{max}}\right)^{m-n}&w<w_{max}\\
+1&w\geq w_{max}\end{cases}
+$$
+with $m-n = 0.3$ and $U=10$ (which sets the steepness of the sigmoidal switch-on of reproduction at around the maturity weight $w_{mat}$).
+
+
+Parameter values
+
+```{r}
+reproduction_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "w_mat" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "w_inf" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(metabolism_parameters, caption = "Table 7: Parameters determining the investment into reproduction")
+
+
+```
+
+
+
+##### 1.2.5 Somatic growth
+
+"What is left over after metabolism and reproduction is taken into account is invested in somatic growth. Thus the growth rate of an individual of species $i$ and weight $w$ is 
+$$
+  g_i(w) = E_{r.i}(w)\left(1-\psi_i(w)\right).
+$$
+When food supply does not cover the requirements of metabolism and activity, growth and reproduction stops, i.e. there is no negative growth."
+
+Parameter values
+
+"The values for the model parameters were chosen so that the resulting growth curves would be close
+to von Bertalanffy growth curves. The paramters in Table 8 were taken from the literature." Here the parameters a and b are parameters for the allometric weight-length relationship w = al^b where w is measured in grams and l is measured in centimeters.
+
+```{r}
+
+growth_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "k_vb" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), 
+    "t0" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "a" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "b" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(growth_parameters, caption = "Table 8: Parameters for observed vonBertalanffy growtyh curves and length-weight relationships")
+
+```
+
+##### Figure xx. Growth curves
+
+
+### 1.3 Mortality
+
+The mortality rate $\mu_i(w)$ of an individual of species $i$ and weight $w$ has four sources: predation mortality $\mu_{p.i}(w)$, background mortality $\mu_{ext.i}(w)$, fishing mortality $\mu_{f.i}(w)$ and excess gear mortality $\mu_{g.i}$, which combine as
+$$
+\mu_i(w)=\mu_{p.i}(w)+\mu_{ext,i}(w)+\mu_{f.i}(w)+\mu_{g.i}(w).
+$$
+We will now explain each of the terms.
+
+
+##### 1.3.1 Predation mortality
+
+"All consumption by fish translates into corresponding predation mortalities on the ingested prey individuals. Recalling that $1-f_j(w)$ is the proportion of the food encountered by a predator of species $j$ and weight $w$ that is actually consumed, the rate at which all predators of species $j$ consume prey of size $w_p$ is 
+$$
+  \mathtt{pred\_rate}_j(w_p) = \int \phi_j(w,w_p) (1-f_j(w))
+  \gamma_j(w) N_j(w) \, dw.
+$$
+
+The mortality rate due to predation is then obtained as "
+$$
+  \mu_{p.i}(w_p) = \sum_j \mathtt{pred\_rate}_j(w_p)\, \theta_{ji}.
+$$
+##### 1.3.2 External mortality
+
+"External mortality $\mu_{ext.i}(w)$ is independent of the abundances. By default, mizer assumes that the external mortality is a species-specific constant $z0_i$ independent of size. The value of $z0_i$ is either specified as a species parameter or it is assumed to depend allometrically on the maximum size: "
+$$
+z0_i = z0_{pre} w_{max.i}^{1-n}.
+$$
+
+
+Parameter values
+
+We use the size-independent external mortalities give in Table 9.
+
+```{r}
+external_mortality_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "z0" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(external_mortality_parameters, caption = "Table 9: External mortality rates in 1/year")
+```
+
+
+
+##### 1.3.3 Fishing mortality
+
+The fishing mortality rate is the product of the species- and size-dependent selectivity of the
+gear, the species-specific catchability and the fishing effort.
+
+This function is retained in MesoMizer for future fishing scenarios, however, we chose to model unfished populations for the current study.
+
+
+##### 1.3.4 Excess gear mortality
+
+The fishing mortality only includes individuals that are hauled onto the fishing vessel. Fishing gear
+also causes mortality among individuals that encounter the gear but are not retained by it. This mortality
+is assumed not to be size-specific. There is a species parameter called gear_mort that gives the
+mortality rate of an individual imposed by the fishing gear. The part of this gear mortality that is not
+fishing mortality (i.e., the part where the individuals are not taken up to the fishing vessel but left dead
+in the sea) we denote as the excess gear mortality.
+
+This excess gear mortality contributes to the carrion production.
+
+This function is retained in MesoMizer for future fishing scenarios, however, we chose to model unfished populations for the current study.
+
+
+### 1.4 Reproduction
+##### 1.4.1 Energy invested into reproduction
+
+"The total rate of investment into reproduction (grams/year) is found by integrating the contribution from all individuals of species $i$, each of which invests a proportion $\psi_i(w)$ of their consumption. This total rate of energy investment can then be converted to a rate of production of offspring $R_{p.i}$ (numbers per year): 
+
+$$
+  R_{p.i} = \frac{\epsilon_i}{2 w_{min.i}} \int N_i(w)  E_{r.i}(w) \psi_i(w) \, dw.
+$$
+
+Here the total rate of investment is multiplied by an efficiency factor $\epsilon$ and then dividing by the offspring weight $w_{min}$ to convert the energy into number of offspring. The result is multiplied by a factor $1/2$ to take into account that only females contribute directly to offspring.
+
+Note that for species that have a pelagic phase the size $w_{min}$ is the size at which the offspring join the benthic ecosystem."
+
+##### 1.4.2 Density-dependence in reproduction
+
+"Three important density-dependent mechanisms widely assumed in fisheries models are automatically
+captured in the mizer model, which lead to an emergent stock-recruitment relationship:
+        1. High density of spawners leads to a reduced food income of the spawners and consequently
+        reduced per-capita reproduction.
+        2. High density of larvae leads to slower growth of larvae due to food competition, exposing the
+        larvae to high mortality for a longer time, thereby decreasing the survivorship to recruitment
+        size.
+        3. High density of fish leads to more predation on eggs and fish larvae by other fish species or by
+        cannibalism.
+"However there are other sources of density dependence that are not explicitly modelled mechanistically
+in mizer. An example would be a limited carrying capacity of suitable spawning grounds and other
+spatial effects. This requires additional phenomenological density dependent contributions to the stock-
+recruitment. In mizer this type of density dependence is modelled through constraints on egg
+production and survival. The default functional form of this density dependence is represented by a
+reproduction rate ;! (numbers per time) that approaches a maximum as the energy invested in
+reproduction increases. This is described by the common Beverton-Holt type function used in fisheries
+science":
+
+$$
+  R_i = R_{\max.i} \frac{R_{p.i}}{R_{p.i} + R_{\max.i}},
+$$
+where $R_{\max.i}$ is the maximum reproduction rate of species $i$.
+
+"The reproduction parameters are not directly observable. The values were instead chosen
+so as to produce steady-state abundances of the species that are in line with observations and to give
+reasonable values for the reproduction level.
+
+Parameter values
+
+Table 13 gives the steady-state reproduction level which is defined as the ratio between the actual
+reproduction rate and the maximal possible reproduction rate."
+
+```{r}
+reproduction_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "w_min" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "erepro" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "R_max" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "reproduction_level" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(reproduction_parameters, caption = "Table 10: Parameters determining reproduction")
+```
+
+
+
+
+# 2 Carrion
+
+"Carrion (consisting of the dead individuals that have not yet decomposed) is an important component
+of the ecosystem, providing food for scavenger species. Feeding on carrion by scavengers is not size-
+based. Scavengers can feed on carrion of any size. Therefore we do not need to describe the carrion by
+a size spectrum but only need to describe its total biomass Bc.
+The rate of change in the total carrion biomass is simply the difference between the rate at which
+carrion biomass is produced and the rate at which it is consumed, so"
+
+$$
+\frac{dB_C}{dt}=p_C - c_C\,B_C.
+$$
+We will discuss the production rate $p_C$ and the consumption rate $c_CB_C$ below.
+
+Parameter values
+
+In the steady state the total carrion biomass per square meter is B_C = r signif(carrion_biomass(params), digits = 4) grams. This was chosen so that the expected lifetime for the carrion biomass, i.e., the inverse of the mass-specific carrion consumption rate, is equal to r signif(carrion_lifetime(params)*365, digits = 3) day."
+
+
+### 2.1 Carrion consumption
+
+"Carrion is consumed by scavengers, but also decomposed by bacteria and other processes. The rate at which carrion biomass is consumed is assumed to be proportional to the available carrion biomass. The proportionality factor $c_C$, which we refer to as the "mass-specific consumption rate", has one component that depends on the abundance of consumers and a constant component $d_C$ representing the mass-specific rate of decomposition.
+
+For each consumer species $i$, a parameter $\rho_i$ determines the rate at which individuals of that species encounter carrion biomass. The rate is assumed to scale with the size of the predator raised to an allometric exponent $n$ which is taken to be the same as the scaling exponent of the maximum intake rate for consumers, 
+$$
+E_{i.C}(w)=\rho_i\, w^n\,B_C.
+$$
+
+Finally, satiation of the consumers is taken into account via their feeding level $f_i(w)$ that was described in the section on [consumption](#consumption). This gives the mass-specific carrion consumption rate 
+$$
+c_C = \sum_i\int\rho_i\, w^n N_i(w) (1-f_i(w))\,dw + d_C.
+$$
+where $d_C$ is the mass-specific rate of decomposition."
+
+
+Parameter values
+
+"The value of the mass-specific rate of decomposition is dc = 233.1173648 per year. This was chosen
+so that the production and consumption are equal for the chosen steady state abundances.
+The parameters pi have units of g-n per year. They are non-zero only for species that do at least some
+scavenging."
+
+
+```{r}
+carrion_consumption_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "rho" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(carrion_consumption_parameters, caption = "Table 11: Parameters determining rates of carrion consumption")
+
+
+
+```
+
+
+
+### 2.2 Carrion production
+
+
+The rate $p_C$ at which carrion biomass is produced by the ecosystem has contributions from three sources, 
+$$
+p_C = p_{C.ext} + p_{C.g} + p_{C.d},
+$$
+each of which we will now discuss."
+
+However, in MesoMizer, we only consider carrion biomass produced by external mortality as we are currently modeling an unfished system.
+
+##### 2.2.1 External mortality
+
+"$p_{C.ext}$ comes from animals that have died by natural causes other than predation ("external"): A mizer model allows for external mortality to describe all deaths by natural causes that are not due to predation from the modelled species. So this external mortality would include deaths that lead to carrion, but also deaths due to predation by species that are not explicitly modelled, for example mammals or sea birds. Thus only a proportion of the external mortality produces carrion. This is given by a carrion parameter `ext_prop`. So 
+$$
+  p_{C.ext} = \mathtt{ext\_prop}\,\sum_i\int\mu_{ext.i}(w)N_i(w)w\,dw.
+$$
+
+
+
+Parameter values
+
+"The value of ext_prop is 0.1713287". - this is from MizerShelf... so 17% of natural mortality produces carrion?
+
+In MesoMizer, we convert Pcext (g y-1) to get carcass carbon in g C y-1 using:
+
+$$
+
+CC = p_{C.ext} * p_{c}
+
+$$
+
+Where CC = carcass carbon in g C y-1, $p_{c}$ = species specific constant; percentage body carbon based on literature values.
+
+```{r}
+carcass_carbon_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "Percentage_C" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(carcass_carbon_parameters, caption = "Table 11: Parameters determining carcass carbon")
+
+
+```
+
+
+
+
+##### 2.2.2 Excess gear mortality
+
+In Mesomizer, we model an unfished system, therefore excess gear mortality params = 0. However, this function is retained to model future mesopelagic fishing scenarios.
+
+"$p_{C.g}$ comes from animals killed by the fishing gear that are not taken up to the fishing vessel but left dead in the sea. Thus 
+$$
+p_{C.g} = \sum_i\int\mu_{g.i}N_i(w)w\,dw,
+$$
+where the excess gear mortality rate $\mu_{g.i}$ was discussed in @sec-excess-gear-mortality."
+
+
+##### 2.2.3 Discards
+
+"$p_{C.d}$ comes from discarding of fished animals ("discards"): There is a species parameter $d_i$, called `discard`, that gives the proportion of the catch biomass that is discarded. This biomass is added to the carrion biomass. Thus" 
+$$
+  p_{C.d} = \sum_i\,d_i\int\mu_{f.i}(w)N_i(w)w\,dw.
+$$
+In Mesomizer, we model an unfished system, therefore excess gear mortality params = 0. However, this function is retained to model future mesopelagic fishing scenarios.
+
+Parameter values
+
+```{r}
+Discard_parameters <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "Discard" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(Discard_parameters, caption = "Table 12: Proportion of caught biomass that is discarded for each species")
+
+
+```
+
+
+
+
+# 3 Detritus
+
+"Detritus is at the base of the benthic foodweb, providing food for detritivores. Also small individuals of other species will ingest detritus particles.
+
+We describe the detritus as a size-spectrum $N_D(w)$, giving the *density* of detritus particles of size $w$, so that $\int_w^{w+dw}N_D(w)dw$ is the *number* of detritus particles in the size interval $[w,w+dw]$. However, we do not know details about the size-specific dynamics of detritus and simply assume that its abundance is described by a power law between a minimum size $w_0$ and a maximum size $w_{cutoff}$: 
+$$
+N_D(w) \propto \begin{cases} 0 & w < w_0\\
+w^{-\lambda} & w_0\leq w\leq w_{cutoff}\\
+0 & w > w_{cutoff}\end{cases}.
+$$
+
+The exponent $\lambda$ is kept fixed and only the coefficient of the power law changes with time to reflect the change in the total detritus biomass 
+
+$$
+B_D = \int_{w_{0}}^{w_{cutoff}} N_D(w)\, w \,dw.
+$$
+
+The rate of change in the total detritus biomass is simply the difference between the rate at which detritus biomass is produced and the rate at which it is consumed, so 
+
+$$
+\frac{dB_D}{dt}=p_D - c_D\,B_D.
+$$
+
+We will discuss the production rate $p_D$ and the consumption rate $c_DB_D$ below.
+
+
+Parameter values
+
+The detritus spectrum stretches from !0 = 6 × 10−12 to !34,500 = 0.001 grams. The power law exponent
+is @ = 2.05. In the steady state the total detritus biomass per square meter is =$ = 254.5 grams. This
+was chosen so that the expected lifetime for the detritus biomass, i.e., the inverse of the mass-specific
+detritus consumption rate, is 1 year."
+
+### 3.1 Detritus consumption
+
+The rate at which detritus biomass is consumed is assumed to be proportional to the available detritus biomass. The proportionality factor $c_D$, which we refer to as the "mass-specific consumption rate", depends on the abundance of consumers.
+
+The consumption of detritus is modelled similarly to the consumption of fish. First we introduce the rate at which all predators of species $j$ consume detritus particles of size $w$:
+$$
+\mu_{D}(w_p) = \sum_j  \theta_{jD}\int \phi_j(w,w_p) (1-f_j(w))
+  \gamma_j(w) N_j(w) \, dw.
+$$
+This is analogous to the [predation mortality] discussed earlier, but with $\theta_{jD}$ determining the strength at which species $j$ feeds on detritus. To get the total rate of detritus consumption we multiply by the weight of the detritus particle and integrate over all detritus particles: 
+$$
+c_DB_D=\int_{w_0}^{w_{cutoff}}\mu_D(w_p)\,w_p\, N_D(w_p)\,dw_p.
+$$
+Because we keep the size-distribution of the detritus fixed, this consumption rate is proportional to the total detritus biomass $B_D$, as we have already indicated by our notation.
+
+
+Parameter values
+
+We use the same value of $\theta_{jD}=$ r ir for all predator species. Note that this does not mean that all species are detritivores. For most species the predation kernel will be such that detritus will only be selected by the very small individuals."
+
+### 3.2 Detritus production
+
+"The rate at which detritus biomass is produced by the ecosystem has contributions from three
+sources, feces, decomposing carrion and external.However, in MesoMizer, we only consider feces as detritus production to avoid the double accounting of carrion and particle export through the BGP."
+
+$$
+p_D = p_{D.f} + p_{D.c} + p_{D.ext},
+$$
+
+
+
+##### 3.2.1 Feces
+
+"$p_{D.f}$ comes from the biomass that is consumed but not assimilated by the predators, i.e., it comes from the feces expelled by the predators. Let $\alpha_i$ be the proportion of the consumed biomass that is assimilated by species $i$ and let $f_i(w)$ be the feeding level and $E_i(w)$ the food encounter rate discussed in the section on [consumption](#consumption). Then "
+
+$$
+p_{D.f} = \sum_i(1-\alpha_i)\int (1-f_i(w))E_i(w)\,dw.
+$$
+In MesoMizer feces in g is converted to g C using literature fecal pellet % C values. To find fecal carbon (FC) we use:
+
+
+$$
+FC = p_{D.f} * p_fc
+$$
+
+
+```{r}
+feces_parameters <- #must figure out when conversion occurs....
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "Percent C" = c(0,0,0,0,0,0,0,0,0,0,0,0,0)
+  )
+
+knitr::kable(feces_parameters, caption = "Table 13: Carbon percentage of fecal pellets")
+```
+
+
+
+
+##### 3.2.2 Decomposing carrion - set to zero
+
+In MesoMizer, we set decomposing carrion to zero, considering just carrion production as the other source of POC instead. This is to capture all POC, even before decomposition and to avoid the double accounting of POC with detritus and carrion production. Below is a description of how mizerShelf accounts for decomposing carrion as a component of detritus:... could remove this function...
+
+"$p_{D.c}$ comes from decomposing carrion. As we discussed in the section on [carrion consumption](#carrion-consumption), carrion biomass is decomposed to detritus at the rate $d_CB_C$ where $d_C$ is a given fixed mass-specific decomposition rate and $B_C$ is the total carrion biomass. So" 
+$$
+p_{D.c}=d_CB_C.
+$$
+
+
+##### 3.2.3 External - set to zero
+
+"$p_{D.ext}$ is the rate at which detritus enters the system from external sources. This will mostly be detritus sinking in from the pelagic zone. This rate is a model parameter independent of any other model component."
+
+In MesoMizer, we want to distinguish between carbon injected by migrators and the BGP. External is the BGP so values here are zero to avoid double accounting. Could remove this function.... 
+
+$$
+p_{D.ext}= 0
+$$
+# 4 Temperature effects
+
+By default, therMizer provides values for the realm, vertical_migration, and exposure parameters that are appropriate for most use cases. 
+
+realm refers to the vertical realms or depth strata which species inhabit and for which temperatures will be provided. These could be named something like epipelagic, mesopelagic, surface, bottom, whatever you want to call them. These realms should be set up as the second dimension (or columns) of ocean_temp: one column per realm representing different time series of temperature. By default, if only one vector of temperature is supplied, there will be only one realm.
+
+vertical_migration simulates the proportion of time that a given size of a given species spends in a given realm. It has the dimensions of realm 
+× sp × w. Values can range from 0 to 1, and must sum to 1 across all realms for each species and size. If values sum to something other than one, it means that either a portion of time is unaccounted for (<1) or that time across realms is over-allocated (>1). Either way, you'll be modeling something that cannot be replicated in the real ocean. By default, species are assumed to spend equal time across all realms.
+
+exposure links vertical_migration to ocean_temp. It has the dimensions of realm × sp. The values are 1 for the realms to which a species is exposed and 0 elsewhere. In theory, you could set all values to 1 and, so long as vertical_migration is constructed correctly, get the same results (because when multiplied by exposure the result would still be 0 for realms in which species spend no time). By default, the exposure is set to 1 for all realms and species and therefore has no effects.
+
+ocean_temp is an array that has temperature(s) in degrees Celsius for each realm. It can be a vector, if temperature is constant over time, or an array for dynamic temperatures. If you're using time-varying temperature, the array will have the dimensions of time × realm.
+
+n_pp is an array that has numerical plankton abundance for each size class. therMizer will convert these abundances to densities for use within mizer. n_pp can be a vector, if these abundances are constant over time, or an array for a dynamic resource. If you're using time-varying plankton, the array will have the dimensions of time × w.
+
+
+
+# 4 Carbon Injection potential (CIP)
+
+
+Carbon injection potential (CIP) is the taxon specific physiological rates that control how much carbon an individual can release in a given time period. This is estimated from the sum of metabolic waste (respired carbon, RC), detritus production (fecal carbon, FC) and carrion production (carcass carbon, CC). Note, excretory carbon not included. 
+
+
+$$
+CIP = RC + FC + CC
+$$
+
+
+# 5 DIC pools per depth layer
+
+RC gives us a DIC pool per depth layer but in order to determine the magnitude of these pools, we must include remineralised POC (from FC and CC). To do so, we need to account for the species specific sinking speeds of fecal pellets and carrion as well as microbial remineralization rates (constant?). We use Halfter et al., 2022 modification of Boyd and Trull (2007): #look for allometric equation in Debbies work
+
+$$
+F_{z}= F_{z0} * e^{z-z_{200}/z*}
+$$
+
+Where $F_{z}$ = total carbon flux at depth $z$, $F_{z0}$ is the reference (or starting flux), $z$ is depth, $z_{200}$ is the reference (or starting depth) and $z*$ is the remineralization length scale determined using:
+
+$$
+z^* = w/k
+$$
+Where $w$ is the sinking velocity in m d-1 and $k$ is the microbial turnover rate in d-1. Sinking velocity here is not sized based (need to find allometric equation)
+
+
+See parameters below:
+
+
+```{r}
+POC_remin_parameters <- 
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "w_f" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), #fecal pellet sinking velcocity
+    "w_c" = c(0,0,0,0,0,0,0,0,0,0,0,0,0), # carcass sinking velocity
+    "k" = c(0,0,0,0,0,0,0,0,0,0,0,0,0) #microbial turnover rate d-1 -> this should just be one constant (or per depth - not per species)
+  )
+
+knitr::kable(POC_remin_parameters, caption = "Table 14: POC remineralization rates")
+```
+
+

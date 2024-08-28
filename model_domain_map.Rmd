@@ -1,0 +1,45 @@
+---
+title: "meso_mizer_model_domain"
+output: html_document
+date: "2024-04-19"
+---
+
+
+
+```{r}
+library(sp)
+library(raster)
+library(sf)
+library(ggplot2)
+
+rm(list = ls()) # clear memory
+
+#create df of points (this is for a rectangular polygon, can make as many vertices as you want)
+SOTS_region <- data.frame(x=c(144.79, 139.43, 139.43,  144.79), y=c(-45.51, -45.51, -50.03, -50.03))
+#turn it into a polygon (uses sp package)
+p <- Polygon(SOTS_region)
+ps <- Polygons(list(p),1)
+sps <- SpatialPolygons(list(ps))
+#give it a projection
+proj4string(sps) = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")
+#save it as a shapefile (uses raster package)
+shapefile(x = sps, file = "C:/Users/kbaker5/OneDrive - University of Tasmania/Desktop/PhD_Salamanca/RstudioProjects/02_MesoMizer/SOTS_region.shp", overwrite = TRUE)
+#read in new shapefile
+SOTS_region <- st_read("C:/Users/kbaker5/OneDrive - University of Tasmania/Desktop/PhD_Salamanca/RstudioProjects/02_MesoMizer/SOTS_region.shp")
+
+```
+
+```{r}
+
+ggplot(SOTS_region) +
+  geom_sf(fill = "#69b3a2", color = "white") +
+  theme_minimal()
+```
+
+```{r}
+# Basic plot of this shape file:
+par(mar = c(0, 0, 0, 0))
+plot(st_geometry(SOTS_region), col = "#f2f2f2", bg = "skyblue", lwd = 0.25, border = 0)
+```
+
+

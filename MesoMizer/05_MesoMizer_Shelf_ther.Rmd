@@ -1,0 +1,771 @@
+---
+title: "05_MesoMizer_Shelf_ther"
+output: html_document
+date: "2024-08-13"
+---
+
+This script contains MizerShelf and therMizer packages.
+
+
+```{r}
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(reshape2)
+# remotes::install_github("gustavdelius/mizerShelf")
+library(mizerShelf)
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/therMizer")
+library(therMizer)
+ 
+ rm(list =ls()) # clear memory
+ 
+```
+
+#Parameter description--------------------------------------------------
+
+```{r}
+
+param_description <- data.frame("parameter" = c("w_inf","w_mat","beta","sigma","R_max","k_vb","l25","l50",
+                                                "a","b","catchability","h","k","ks","z0","gamma","w_mat25","erepro", "RQ", "gear_mort", "p_FC", "z0", "rho"),
+                                "description" = c("asymptotic weigth",
+                                                  "maturation weight (determines when 50% of the population has matured using a sigmoid function)",
+                                                  "preferred predator/prey mass ratio","width of the feeding kernel",
+                                                  "Beverton-Holt density dependence parameter",
+                                                  "von Bertalanffy growth parameter","length at 25% catch","length at 50% catch",
+                                                  "coefficient for age to size conversion",
+                                                  "constant for age to size conversion","fisheries efficiency","maximum intake rate","metabolism constant",
+                                                  "metabolism coefficient","background mortality coefficient",
+                                                  "search volume (obtained from beta and sigma)",
+                                                  "weight at which 25% of individuals are mature","reproductive output scalar", "respiratory quotient", "mortality rate due to fishing gear", "carbon content of fecal pellets (%)", "carrion parameter", "carrion parameter")
+) #add biomass observed 
+
+knitr::kable(param_description, caption = "parameters' description")
+
+
+```
+
+#Species parameters
+
+
+```{r}
+sp_1 <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp","Bathylagus spp","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "w_inf" = c(0.417,0.318,1.7,0.1,26.78,58.3,1.62,81.43,20,3.6,0.28,375.8,12),
+    "beta" = c(log10(7.2),log10(7.2),log10(2),log10(2),log10(2),log10(2),log10(2),log10(2),log10(1.4),log10(1.35),log10(1.35),log10(7.7),log10(3.7)),
+    "biomass_observed" = c(0.1970, 0.1582, 0.0704,0.1012,0.6665,0.0658,0.4307,0.1493,0.2333,4.3799,0.0126,31.4392,0.1215), #biomass in g m-2. See Biomass_SOLACE.rmd
+    "k_vb" = c(0.6, 0.4, 0.8, 0.6, 0.2, 0.4, 0.9, 0.5, 0.4, 0.2, 0.2,0.2,0.2),
+    "gear_mort" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
+    "RQ" = c(0.9, 0.9, 1.0, 0.9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8, 1.0),
+    "p_FC" = c(0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4) # carbon content of fecal pellets (%)
+   # "z0" = c(0.1, 0.1, 0.1,0.1, 0.1, 0.1, 0.1, 0.1, 0.1,0.1, 0.1, 0.1, 0.1), # carrion parameter - may delete
+   # "rho" = c(200, 200, 200, 200, 200, 200,200, 200, 200,200, 200, 200,200) # carrion parameter - may delete
+  )
+#"sigma" = c(0.7,0.7, 1.3,1.3,1.3,1.3,1.3,1.3,1.3,0.46,0.57,0.7,0.52)) - this causes p. atlanticum to go extinct(too narrow... factor these in later)
+
+              
+knitr::kable(sp_1, caption = "species' parameters")
+
+
+                
+                   
+```
+
+
+#Species interaction matrix
+
+```{r}
+#predator = row, prey = column
+#sp_1_inter does not include DVM only feeding type - i.e. herbivores (0) and carnivores (1)
+sp_1_inter <- matrix (c(
+0,0,1,1,1,1,1,1,1,1,1,0,1,
+0,0,1,1,1,1,1,1,1,1,1,0,1,
+0,0,1,1,1,1,1,1,1,1,1,0,1,
+0,0,1,1,1,1,1,1,1,1,1,0,1,
+0,0,0,0,1,1,1,1,1,1,1,0,1,
+0,0,0,0,1,1,1,1,1,1,1,0,1,
+0,0,0,0,1,1,1,1,1,1,1,0,1,
+0,0,0,0,1,1,1,1,1,1,1,0,1,
+0,0,0,0,1,1,1,1,1,1,1,0,1,
+0,0,1,1,1,1,1,1,1,1,1,0,1,
+0,0,1,1,1,1,1,1,1,1,1,0,1,
+0,0,1,1,1,1,1,1,1,1,1,0,1,
+0,0,1,1,1,1,1,1,1,1,1,0,1
+
+
+), ncol = 13,
+                     dimnames = list(sp_1$species, sp_1$species) )
+
+knitr::kable(sp_1_inter, caption = "species' interactions")
+
+
+sp_2_inter <- matrix (c(1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0.5,	0.5,	1,	0.5,	0.5,	0.5,	1,	1,	0.5,	0.5,	0.5,	0.5,	0.5,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+0,	0,	0,	0.5,	1,	1,	0.58,	0.58,	0,	0.5,	0,	0.5,	0,
+0,	0,	0,	0.5,	1,	1,	0.58,	0.58,	0,	0.5,	0,	0.5,	0,
+0.5,	0.5,	0.5,	0.08,	0.58,	0.58,	1,	1,	0.5,	0.08,	0.5,	0.08,	0.5,
+0.5,	0.5,	0.5,	0.08,	0.58,	0.58,	1,	1,	0.5,	0.08,	0.5,	0.08,	0.5,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1
+
+), ncol = 13,
+                     dimnames = list(sp_1$species, sp_1$species) )
+
+knitr::kable(sp_2_inter, caption = "species' interactions")
+
+```
+
+```{r}
+sp_1<- newMultispeciesParams(sp_1, sp_1_inter, w_pp_cutoff = 1 ) #not sure what w_pp_cutoff - look this up....
+species_params(sp_1)
+
+
+meso_p1 <- steady(sp_1)
+
+tuneParams(sp_1)
+
+#params_v1 <- tuneParams(sp_1) #saved as tunedparams_sp1
+
+params_v1 <- readRDS("tuned_params_sp1.rds")
+#params_v2 <- tuneParams(params_v2)
+```
+#set thermal tolerances for species
+
+```{r}
+# Assign them thermal tolerance limits
+temp_min <- c(-5, 5,-5, 5,-5, 5,-5, 5,-5, 5,-5, 5,5)
+temp_max <- c(10, 20,10, 20,10, 20,10, 20,10, 20,10, 20,10)
+species_params(params_v1)$temp_min <- temp_min
+species_params(params_v1)$temp_max <- temp_max
+```
+
+
+
+#set temperature parameters for DVM
+
+```{r}
+realm_names <- c("Epi","Umeso","Lmeso")
+species_names <- as.character(params_v1@species_params$species)
+sizes <- params_v1@w
+
+# Create the vertical migration array and fill it
+vertical_migration_array <- array(0, dim = (c(length(realm_names), 
+                                  length(species_names), length(sizes))), 
+                                  dimnames = list(realm = realm_names, sp = species_names, 
+                                  w = signif(sizes,3))) # realm x species x size
+
+Epi <- which(realm_names == "Epi")
+Umeso <- which(realm_names == "Umeso") 
+Lmeso <- which(realm_names == "Lmeso") 
+
+# Define a list of species and their corresponding time allocations
+species_allocations <- list(
+  "Lampanyctus australis" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Euphausia similis" = c(Epi = 0.2, Umeso = 0.3, Lmeso = 0.5),
+  "Thysannoessa macura" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Sergestes spp" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Themisto spp" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Nannobrachium achirus" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Cyclothone spp" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Bathylagus spp" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Cranchidae" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Chaetognath" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Gymnosomata" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Pyrosoma atlanticum" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5),
+  "Atolla wyvillei" = c(Epi = 0.5, Umeso = 0, Lmeso = 0.5)
+)
+
+# Loop through the species and populate the vertical migration array
+for (sp in names(species_allocations)) {
+  sp_index <- which(species_names == sp)
+  allocations <- species_allocations[[sp]]
+  vertical_migration_array[Epi, sp_index, ] <- allocations["Epi"]
+  vertical_migration_array[Umeso, sp_index, ] <- allocations["Umeso"]
+  vertical_migration_array[Lmeso, sp_index, ] <- allocations["Lmeso"]
+}
+
+```
+
+
+#set up exposure array
+
+```{r}
+exposure_array <- array(0, dim = (c(length(realm_names), length(species_names))), 
+                  dimnames = list(realm = realm_names, sp = species_names)) # realm x species
+
+for (r in seq(1,length(realm_names),1)) {
+    for (s in seq(1,length(species_names),1)) {
+        if (any(vertical_migration_array[r,s,] > 0)) {
+            exposure_array[r,s] = 1
+        }
+    }
+}
+
+
+# Create temperature array and fill it
+times <- 0:500
+ocean_temp_array <- array(NA, dim = c(length(times), length(realm_names)), 
+                    dimnames = list(time = times, realm = realm_names))
+temp_inc <- 0
+for (i in 1:501) {
+  ocean_temp_array[i,] <- c(-4 + temp_inc, -1 + temp_inc, 11 + temp_inc) #this should reflect the temp at each depth but check
+  temp_inc <- temp_inc + 0.01
+}
+
+```
+
+
+#upgrade therParams
+
+```{r}
+#params <- upgradeTherParams(params = params_v1, 
+                          #  temp_min = temp_min,
+                          #  temp_max = temp_max,
+                          #  ocean_temp_array = ocean_temp_array,
+                           # n_pp_array = n_pp_array, 
+                          #  vertical_migration_array = vertical_migration_array,
+                          #  exposure_array = exposure_array, 
+                          #  aerobic_effect = TRUE, 
+                          #  metabolism_effect = TRUE)
+                                
+
+
+```
+
+#tune params
+
+```{r}
+#params_v2 <- tuneParams(params)
+```
+
+# Carbon outputs
+
+### 1. Respiration
+
+```{r}
+#Get metabolic rate per species and size (g y-1)
+metab(params_v1)
+
+
+# Assume params is already defined and get metabolic rates per species and size
+metabolic_rates <- metab(params_v1)
+
+# Convert metabolic rates array to long-format data frame
+metabolic_rates_df <- melt(metabolic_rates, varnames = c("Species", "Size"), value.name = "Metabolic_Rate")
+
+# Plot using ggplot2 with log scale for size
+ggplot(metabolic_rates_df, aes(x = Size, y = Metabolic_Rate, color = as.factor(Species))) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Metabolic Rate per Size for Each Species",
+       x = "Size (w)",
+       y = "Metabolic Rate",
+       color = "Species") +
+  theme_minimal()
+```
+
+
+# Convert respiration rate to respired carbon (g C)
+
+
+
+```{r}
+
+params <- params_v1  # replace params_v1 with your actual MizerParams object
+
+# Extract the species parameters from the MizerParams object
+species_params <- params@species_params
+
+# Extract the size bins (w) from the MizerParams object
+size_bins <- params@w
+
+# Constants
+energy_content <- 22         # kJ per gram based on a mixed diet - could make this more dynamic to reflect feeding types
+oxygen_conversion <- 20.1      # kJ per liter of O2
+hours_per_year <- 8760         # Number of hours in a year
+
+
+# Function to calculate respiratory oxygen uptake for each size class of a species
+calculate_resp_oxygen_uptake <- function(ks, p, size_bins, energy_content, oxygen_conversion, hours_per_year) {
+  # Calculate energy consumption rate in kJ/year for each size bin
+  oxygen_uptake_liters_year <- (ks * (size_bins^p) * energy_content)/ oxygen_conversion
+  
+  # Convert oxygen uptake to liters per hour for each size bin
+  oxygen_uptake_L_hour <- oxygen_uptake_liters_year / hours_per_year
+  
+  return(oxygen_uptake_L_hour)
+}
+
+# Initialize an empty list to store results for each species
+resp_oxygen_uptake_list <- list()
+
+# Loop over each species and calculate the respiratory oxygen uptake for all size bins
+for (i in 1:nrow(species_params)) {
+  ks <- species_params$ks[i]
+  p <- species_params$p[i]
+  
+  resp_oxygen_uptake <- calculate_resp_oxygen_uptake(ks, p, size_bins, 
+                                                     energy_content, oxygen_conversion, 
+                                                     hours_per_year)
+  
+  # Store the result in the list
+  resp_oxygen_uptake_list[[species_params$species[i]]] <- resp_oxygen_uptake
+}
+
+# Convert the list to a dataframe for easier handling
+resp_oxygen_uptake_df <- do.call(cbind, resp_oxygen_uptake_list)
+
+# Add the size bins as a column
+resp_oxygen_uptake_df <- data.frame(size_bins = size_bins, resp_oxygen_uptake_df)
+
+# Replace the "." in the column names with a space
+colnames(resp_oxygen_uptake_df) <- gsub("\\.", " ", colnames(resp_oxygen_uptake_df))
+
+# Display the resulting dataframe with respiratory oxygen uptake
+print(resp_oxygen_uptake_df)
+
+```
+
+
+```{r}
+# Define the conversion factor from oxygen uptake to carbon
+oxygen_to_carbon <- 12 / 22.4  # This is the factor (12/22.4) to convert oxygen to carbon
+
+# Extract the RQ values from the species parameters
+RQ_values <- species_params$RQ  # Assuming the column for RQ is named "RQ"
+
+# Function to calculate respired carbon using species-specific RQ
+calculate_respired_carbon <- function(resp_oxygen_uptake, RQ, oxygen_to_carbon) {
+  respired_carbon <- resp_oxygen_uptake * RQ * oxygen_to_carbon
+  return(respired_carbon)
+}
+
+
+# Initialize an empty dataframe to store the respired carbon values
+respired_carbon_df <- resp_oxygen_uptake_df
+
+
+# Loop over each species to calculate respired carbon
+for (i in 2:ncol(resp_oxygen_uptake_df)) {
+  species_name <- colnames(resp_oxygen_uptake_df)[i]
+  RQ <- RQ_values[i - 1]  # RQ for the specific species
+  
+  # Apply the conversion to get respired carbon
+  respired_carbon_df[[species_name]] <- calculate_respired_carbon(resp_oxygen_uptake_df[[species_name]], RQ, oxygen_to_carbon)
+}
+
+
+# species_names <- rownames(params_v1@species_params)
+# size_bins <- params_v1@w
+
+
+
+
+
+```
+
+
+## plot
+
+```{r}
+
+
+# Reshape the dataframe to long format
+respired_carbon_long <- respired_carbon_df %>%
+  pivot_longer(
+    cols = -size_bins,                # All columns except size_bins
+    names_to = "Species",             # New column for species names
+    values_to = "Respired_Carbon"     # New column for respired carbon values
+  ) %>%
+  rename(Size = size_bins)            # Rename size_bins to Size for consistency
+
+# Plot using ggplot2 with log scale for size
+RC_p <- ggplot(respired_carbon_long, aes(x = Size, y = Respired_Carbon, color = Species)) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Respired Carbon per Size for Each Species",
+       x = "Size (g)",
+       y = "RC (g C m-2)",
+       color = "Species") +
+  theme_minimal()
+
+# Display the plot
+print(RC_p)
+
+```
+
+
+
+
+
+
+# Fecal Carbon
+
+```{r}
+
+detritus_production_per_species <- function(params_v1, n = params_v1@initial_n, # in MizerShelf, detritus production includes feces, decomposing carrion and external. For now we only want to extract feces, but we'll keep the other functions in at this stage.
+                                            n_other = params_v1@initial_n_other,
+                                            rates = getRates(params_v1)) {
+    # Calculate the consumption for each species
+    consumption <- sweep((1 - rates$feeding_level) * rates$encounter * n, 2,
+                         params_v1@dw, "*", check.margin = FALSE)
+    
+    # Calculate the feces production for each species
+    feces <- sweep(consumption, 1, (1 - params_v1@species_params$alpha), "*", 
+                   check.margin = FALSE)
+    
+    # Calculate the carrion decomposition
+    carrion <- params_v1@other_params$carrion$decompose * n_other$carrion
+    
+    # Create a list to store detritus production per species
+    detritus_per_species <- list(
+        external = params_v1@other_params$detritus$external,
+        feces = feces,
+        carrion = carrion
+    )
+    
+    return(detritus_per_species)
+}
+
+
+
+detritus <- detritus_production_per_species(params_v1)
+
+species_names <- rownames(params_v1@species_params)
+size_bins <- params_v1@w
+
+# Extract the feces matrix
+feces_matrix <- detritus$feces
+
+# Assign the correct column names (size bins)
+colnames(feces_matrix) <- size_bins
+
+# Convert to a data frame and add species names
+feces_df <- as.data.frame(feces_matrix)
+feces_df$Species <- rownames(feces_matrix)
+
+# Reshape the data to long format
+
+feces_long <- feces_df %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "Feces_production") %>%
+  mutate(Size = as.numeric(Size))
+
+# View the final data frame
+print(feces_long)
+
+
+
+```
+
+
+
+# Convert feces (g m-2 y-1) to (g m-2 C y-1)
+
+
+
+```{r}
+#check time units......
+
+# Extract the p_FC parameter from params_v1
+p_FC <- params_v1@species_params$p_FC
+
+# Create a data frame with species and their corresponding p_FC values
+p_FC_df <- data.frame(Species = rownames(params_v1@species_params), p_FC = p_FC)
+
+# Merge the p_FC values into the feces_long dataframe
+feces_long <- merge(feces_long, p_FC_df, by = "Species", all.x = TRUE)
+
+
+# Calculate Fecal Carbon (FC)
+feces_df <- feces_long%>%
+  mutate(Fecal_Carbon = Feces_production *p_FC)
+
+
+# View the resulting feces_df
+head(feces_df)
+
+ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Species))) +
+  geom_line() +
+  scale_y_log10()+
+  scale_x_log10() +
+  labs(title = "Fecal Carbon per Size for Each Species",
+       x = "Size (g)",
+       y = "g C m-2 y-1",
+       color = "Species") +
+  theme_minimal()
+
+```
+
+
+
+#Carrion production
+
+```{r}
+#approach 1 - take carrion from proportion of detritus
+
+# Extract the feces matrix
+carrion_matrix <- detritus$carrion
+
+# Assign the correct column names (size bins)
+colnames(carrion_matrix) <- size_bins
+
+# Convert to a data frame and add species names
+carrion_df <- as.data.frame(carrion_matrix)
+carrion_df$Species <- rownames(carrion_matrix)
+
+# Reshape the data to long format
+
+carrion_long <- carrion_df %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "carrion_production") %>%
+  mutate(Size = as.numeric(Size))
+
+# View the final data frame
+print(carrion_long)
+
+
+
+```
+
+
+
+```{r}
+
+
+#approach 2 - manually extract external mort rates and multiply by weight
+#this doesn't take size into account---------
+
+
+# Extract the external mortality rates
+ext_mort <- getExtMort(params_v1)
+
+# Get the size spectrum (abundance) for each species
+n <- getN(params_v1)
+
+# Calculate carrion production
+carrion_production <- ext_mort * n
+
+
+# Assign the correct column names (size bins)
+colnames(carrion_production) <- size_bins
+
+# Optional: If you want to save it as a dataframe for easier manipulation
+carrion_df <- as.data.frame(carrion_production)
+carrion_df$Species <- rownames(carrion_production)
+
+
+# colnames(carrion_df) <- params_v1@species_params$species
+# carrion_df$Size <- params_v1@w
+
+
+# Reshape the data to long format
+
+carrion_long <- carrion_df %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "Carrion_production") %>%
+  mutate(Size = as.numeric(Size))
+
+
+
+# View the dataframe
+head(carrion_long)
+
+```
+
+
+
+
+```{r}
+
+#approach 3: extract external contribution to carrion production
+
+carrion_production_per_species <- function(params_v1, n = params_v1@initial_n, 
+                                           rates = getRates(params_v1)) {
+    # Calculate natural mortality contribution to carrion per species
+    mu_b_contribution <- (params_v1@mu_b * n) * (params_v1@w * params_v1@dw) *
+                         params_v1@other_params$carrion$ext_prop
+    
+    # Calculate gear mortality contribution to carrion per species
+    gear_mort_contribution <- (gearMort(params_v1, rates$f_mort) * n) * 
+                              (params_v1@w * params_v1@dw)
+    
+    # Calculate discards contribution to carrion per species
+    discards_contribution <- ((rates$f_mort * n) * (params_v1@w * params_v1@dw)) *
+                             params_v1@species_params$discard
+    
+    # Create a list to store carrion production per species
+    carrion_per_species <- list(
+        mu_b = mu_b_contribution,
+        gear_mort = gear_mort_contribution,
+        discards = discards_contribution
+    )
+    
+    return(carrion_per_species)
+}
+
+# Assume params is already defined and get carrion production per species
+carrion <- carrion_production_per_species(params_v1)
+
+carrion
+
+getCarrionProduction(params_v1)
+#getCarrionConsumption(params_v1)
+
+```
+
+
+
+
+
+#plot - carrion
+
+```{r}
+
+```
+
+
+##split carbon products up by depth layer - based on interaction matrix (or based on vertical_migration_array?)
+
+
+```{r}
+#combine carbon products dataframe
+
+# Combine the two dataframes
+combined_df <- merge(respired_carbon_long, feces_df, by = c("Species", "Size"))
+
+# View the combined dataframe
+head(combined_df)
+
+```
+
+# add in DVM info
+
+```{r}
+
+
+# Convert vertical_migration_array to a dataframe
+vertical_migration_df <- as.data.frame(vertical_migration_array)
+
+# Transpose the dataframe so species names are in a column
+vertical_migration_df <- t(vertical_migration_df)
+
+# Convert it back to a dataframe and add row names as a column
+vertical_migration_df <- as.data.frame(vertical_migration_df)
+vertical_migration_df$Species <- rownames(vertical_migration_df)
+rownames(vertical_migration_df) <- NULL
+
+
+# Rename the columns for easier merging
+colnames(vertical_migration_df) <- c("P_Epi", "P_Umeso", "P_Lmeso", "Species")
+
+
+# Split the Species column into species name and size using strsplit
+split_values <- strsplit(as.character(vertical_migration_df$Species), "(?<=\\D)\\.(?=\\d)", perl = TRUE)
+
+# Extract the species name
+vertical_migration_df$Species <- sapply(split_values, `[`, 1)
+
+# Extract the size
+vertical_migration_df$Size <- sapply(split_values, `[`, 2)
+vertical_migration_df <- vertical_migration_df %>% 
+  select(-Size)
+
+
+# Merge the vertical migration data with your combined dataframe
+final_df <- merge(combined_df, vertical_migration_df, by = c("Species"), all.x = TRUE) #may need to make this more dynamic and incorporate DVM based on size - to be discussed later
+
+final_df <- final_df %>% 
+  unique()
+# View the final dataframe
+head(final_df)
+
+```
+
+## Add sinking speed (based on size and microbial remineralization rates - function)
+
+```{r}
+
+#F_{z}= F_{z0} * e^{z-z_{200}/z*}
+
+#Where $F_{z}$ = total carbon flux at depth $z$, $F_{z0}$ is the reference (or starting flux), $z$ is depth, $z_{200}$ is the reference (or starting depth) and $z*$ is the remineralization length scale determined using:
+
+#z^* = w/k
+
+#Where $w$ is the sinking velocity in m d-1 and $k$ is the microbial turnover rate in d-1. Sinking velocity here is not sized based (need to find allometric equation)
+
+```
+
+## Plot DIC
+
+```{r}
+
+carbon_pools <- final_df %>% 
+  group_by(Species) %>% 
+  mutate(total_DIC = sum(Respired_Carbon)) %>% 
+  mutate(total_POC = sum(Fecal_Carbon)) %>% 
+  select(Species, total_DIC, total_POC, P_Epi, P_Umeso, P_Lmeso) %>% 
+  unique() %>% 
+  mutate(DIC_Epi = total_DIC * P_Epi *7, #based on hours at surface from SOLACE (not species specific)
+         DIC_Umeso = total_DIC * P_Umeso * 2,
+         DIC_Lmeso = total_DIC * P_Lmeso *15,
+         POC_Epi = total_POC * P_Epi *7, 
+         POC_Umeso = total_POC * P_Umeso * 2,
+         POC_Lmeso = total_POC * P_Lmeso *15,) %>% 
+  ungroup()
+
+# Gather the data into a long format for plotting
+DIC_long <- carbon_pools %>%
+  select(Species, DIC_Epi, DIC_Umeso, DIC_Lmeso) %>%
+  pivot_longer(cols = c(DIC_Epi, DIC_Umeso, DIC_Lmeso), 
+               names_to = "Layer", 
+               values_to = "DIC") %>%
+  mutate(Layer = factor(Layer, levels = c("DIC_Lmeso", "DIC_Umeso", "DIC_Epi")))
+
+# Create the horizontal bar plot
+ggplot(DIC_long, aes(x = DIC, y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "g C m-2 d-1", y = "Depth Stratum") +
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(legend.title = element_blank())
+
+
+```
+
+#POC -> need to add in sinking and remineralization rates & add to above DIC plot
+
+```{r}
+
+
+# Gather the data into a long format for plotting
+POC_long <- carbon_pools %>%
+  select(Species, POC_Epi, POC_Umeso, POC_Lmeso) %>%
+  pivot_longer(cols = c(POC_Epi, POC_Umeso, POC_Lmeso), 
+               names_to = "Layer", 
+               values_to = "POC") %>%
+  mutate(Layer = factor(Layer, levels = c("POC_Lmeso", "POC_Umeso", "POC_Epi")))
+
+# Create the horizontal bar plot
+ggplot(POC_long, aes(x = POC, y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "g C m-2 d-1", y = "Depth Stratum") +
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(legend.title = element_blank())
+
+
+
+```
+
+
+
+
+
+

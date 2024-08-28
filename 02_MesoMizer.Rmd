@@ -1,0 +1,116 @@
+---
+title: "MesoMizer"
+output: html_document
+date: "2024-05-29"
+---
+
+
+```{r}
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(readr)
+ remotes::install_github("gustavdelius/mizerShelf")
+ 
+ rm(list =ls()) # clear memory
+ 
+```
+
+#Parameter description--------------------------------------------------
+
+```{r}
+
+param_description <- data.frame("parameter" = c("w_inf","w_mat","beta","sigma","R_max","k_vb","l25","l50",
+                                                "a","b","catchability","h","k","ks","z0","gamma","w_mat25","erepro"),
+                                "description" = c("asymptotic weigth",
+                                                  "maturation weight (determines when 50% of the population has matured using a sigmoid function)",
+                                                  "preferred predator/prey mass ratio","width of the feeding kernel",
+                                                  "Beverton-Holt density dependence parameter",
+                                                  "von Bertalanffy growth parameter","length at 25% catch","length at 50% catch",
+                                                  "coefficient for age to size conversion",
+                                                  "constant for age to size conversion","fisheries efficiency","maximum intake rate","metabolism constant",
+                                                  "metabolism coefficient","background mortality coefficient",
+                                                  "search volume (obtained from beta and sigma)",
+                                                  "weight at which 25% of individuals are mature","reproductive output scalar")
+) #add biomass observed 
+
+knitr::kable(param_description, caption = "parameters' description")
+
+
+```
+
+#Species parameters
+
+
+```{r}
+sp_1 <-
+  data.frame(
+    "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp.", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp.","Bathylagus spp.","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
+    "w_inf" = c(0.417,0.318,1.7,0.1,26.78,58.3,1.62,81.43,20,3.6,0.28,375.8,12),
+    "beta" = c(log10(7.2),log10(7.2),log10(2),log10(2),log10(2),log10(2),log10(2),log10(2),log10(1.4),log10(1.35),log10(1.35),log10(7.7),log10(3.7)),
+    "biomass_observed" = c( 1.714941e+11,1.561756e+11,3.815464e+10,6.383045e+10,4.760506e+11,2.213141e+10,1.499316e+11,5.021544e+10,1.675264e+11,3.649106e+12,4.251151e+09,3.002268e+13,7.149292e+10),
+    "k_vb" = c(0.6, 0.4, 0.8, 0.6, 0.2, 0.4, 0.9, 0.5, 0.4, 0.2, 0.2,0.2,0.2)
+  )
+#"sigma" = c(0.7,0.7, 1.3,1.3,1.3,1.3,1.3,1.3,1.3,0.46,0.57,0.7,0.52)) - this causes p. atlanticum to go extinct(too narrow... factor these in later)
+
+              
+knitr::kable(sp_1, caption = "species' parameters")
+
+
+                
+                   
+```
+
+#Species interaction matrix
+
+```{r}
+
+sp_1_inter <- matrix (c(1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0.5,	0.5,	1,	0.5,	0.5,	0.5,	1,	1,	0.5,	0.5,	0.5,	0.5,	0.5,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+0,	0,	0,	0.5,	1,	1,	0.58,	0.58,	0,	0.5,	0,	0.5,	0,
+0,	0,	0,	0.5,	1,	1,	0.58,	0.58,	0,	0.5,	0,	0.5,	0,
+0.5,	0.5,	0.5,	0.08,	0.58,	0.58,	1,	1,	0.5,	0.08,	0.5,	0.08,	0.5,
+0.5,	0.5,	0.5,	0.08,	0.58,	0.58,	1,	1,	0.5,	0.08,	0.5,	0.08,	0.5,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1,
+0,	0,	0.5,	1,	0.5,	0.5,	0.08,	0.08,	0,	1,	0,	1,	0,
+1,	1,	0.5,	0,	0,	0,	0.5,	0.5,	1,	0,	1,	0,	1
+
+), ncol = 13,
+                     dimnames = list(sp_1$species, sp_1$species) )
+
+knitr::kable(sp_1_inter, caption = "species' interactions")
+
+```
+
+```{r}
+sp_1<- newMultispeciesParams(sp_1, sp_1_inter, w_pp_cutoff = 1 ) #not sure what w_pp_cutoff - look this up....
+species_params(sp_1)
+```
+
+
+```{r}
+
+meso_p1 <- steady(sp_1)
+
+params_v1 <- tuned_params1
+
+params_v2 <- tuneParams(tuned_params1)
+
+meso_sizespectra1 <- plotlySpectra(meso_p1, power = 2)
+
+meso_sizespectra1
+```
+#calibrate biomasses
+
+```{r}
+
+calibrateBiomass(meso_p1)
+
+plotBiomassVsSpecies(meso_p1)
+```
+

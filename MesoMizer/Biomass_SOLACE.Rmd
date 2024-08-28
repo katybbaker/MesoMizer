@@ -1,0 +1,144 @@
+---
+title: "01_SOLACE_biomass"
+output: html_document
+date: "2024-05-08"
+---
+
+# Load data -------------------------------------------------------------
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(ggh4x)
+library(rcartocolor)
+library(gridExtra)
+library(viridis)
+library(here) # uses the here::here() function to get the working directory of Rproj folder
+library(geosphere)
+
+
+
+rm(list =ls()) # clear memory
+catchcomp_total <- read.csv("C:/Users/kbaker5/OneDrive - University of Tasmania/Desktop/PhD_Salamanca/RstudioProjects/02_MesoMizer/input/Input_01_IN2020_V08_CatchComp_allsites_nolength.csv")
+
+
+```
+
+
+#calculate model domain area
+
+```{r}
+
+# Define the polygon coordinates
+SOTS_region <- data.frame(x=c(144.79, 139.43, 139.43, 144.79), y=c(-45.51, -45.51, -50.03, -50.03))
+
+# Calculate the area of the polygon in square meters
+polygon_m3 <- areaPolygon(cbind(SOTS_region$x, SOTS_region$y)) *1000
+
+# Print the area of the polygon in m-2
+print(polygon_m3)
+
+
+```
+
+
+
+#data wrangle
+
+
+```{r}
+catchcomp_total1 <- catchcomp_total %>% 
+  dplyr::select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated,Taxa_PLAOS,
+                Weight_Std_gm3_sp)  %>% 
+  mutate(Depth_Stratum = case_when(Depth_Stratum == "Lmeso" ~ "LM",
+                                          Depth_Stratum == "Meso" ~ "UM",
+                                          Depth_Stratum == "Epi" ~ "E"))
+
+
+catchcomp_total1 <- na.omit(catchcomp_total1)
+catchcomp_total1$Depth_Stratum <- factor(as.factor(catchcomp_total1$Depth_Stratum),levels = c("LM", "UM", "E"))
+catchcomp_total1$Site <- factor(as.factor(catchcomp_total1$Site), levels = c("SOTS","55S","58S"))
+
+
+```
+
+#filter for target species
+
+```{r}
+catchcomp_total1 <- catchcomp_total1 %>% 
+ mutate(Taxa_updated = case_when(
+    Taxa_updated == "Cranchiidae - undifferentiated" ~ "Cranchidae",
+    Taxa_updated == "Euphausia similis similis" ~ "Euphausia similis",
+    Taxa_updated == "Euphausia spp." ~ "Euphausia similis",
+    Taxa_updated == "Euphausiidae - undifferentiated" ~ "Euphausia similis",
+    Taxa_updated == "Order Gymnosomata - undifferentiated" ~ "Gymnosomata",
+    Taxa_updated == "Order Euphausiacea - undifferentiated" ~ "Euphausia similis",
+    Taxa_updated == "Phylum Chaetognatha - undifferentiated" ~ "Chaetognath",
+    Taxa_updated == "Themisto gaudichaudii" ~ "Themisto spp",
+    Taxa_updated == "Thysanoessa spp." ~ "Thysannoessa macura",
+    TRUE ~ Taxa_updated
+  ))
+
+
+Mesomizer_species <- catchcomp_total1 %>% 
+  filter(Taxa_updated %in% c("Euphausia similis", "Thysannoessa macura", "Euphausia tricantha", "Gennadas spp.","Sergestes spp.", "Themisto spp", "Electrona antarctica", "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp.", "Bathylagus spp.", "Cranchidae", "Chaetognath", "Gymnosomata", "Pyrosoma atlanticum", "Salpa thompsoni", "Atolla wyvillei", "Periphylla Periphylla", "Omnivorous copepod", "Carnivorous copepod"))%>% 
+filter(Site == "SOTS")
+
+	
+
+
+
+
+
+```
+
+
+#find biomass per species, depth & site
+
+```{r}
+
+# Find biomass per species, depth & site
+Biomass_deployment <- Mesomizer_species %>%
+  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
+  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
+  summarise(StdWt = sum(Weight_Std_gm3_sp)) %>% #one weight per species per deployment
+  ungroup() %>%
+  group_by(daylight, Taxa_updated, Depth_Stratum) %>%  
+  summarise(weight_mean_depth = mean(StdWt)) %>% #one weight per species per day/night & depth (average deployments)
+  ungroup() %>% 
+ mutate(g_m2 = case_when(
+    Depth_Stratum == "E" ~ weight_mean_depth * 200,
+    Depth_Stratum == "UM" ~ weight_mean_depth * 200,
+    Depth_Stratum == "LM" ~ weight_mean_depth * 600
+  )) %>% #convert from g m-3 to g m-2 by multipling by depth sampled. E = 200, UM = 200, LM = 600
+  group_by(daylight, Taxa_updated) %>%
+  summarise(
+    Weight_wc_gm2_sp = sum(g_m2, na.rm = TRUE) #one weight per species per whole water column (add each layer)
+  ) %>% 
+  ungroup() %>% 
+  group_by(Taxa_updated) %>% 
+  summarise(
+    weight_total_gm2_sp = mean(Weight_wc_gm2_sp) #average day and night values
+  )
+
+write.csv(Biomass_deployment, "Biomass_av_wc.csv")
+
+```
+
+
+#Find Biomass per model domain - not using this
+
+```{r}
+Biomass_depth_tod <- Biomass_deployment %>%
+  mutate(Biomass_g = weight_total_gm3_sp * polygon_m3)
+
+write.csv(Biomass_depth_tod, "Biomass_depth_Tod.csv")
+```
+
+
+
+
+

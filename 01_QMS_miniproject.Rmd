@@ -14,6 +14,7 @@ library(tidyverse)
 library(dplyr)
 library(ggplot2)
 library(readr)
+ remotes::install_github("gustavdelius/mizerShelf")
 ```
 
 
@@ -34,17 +35,35 @@ param_description <- data.frame("parameter" = c("w_inf","w_mat","beta","sigma","
                                                   "metabolism coefficient","background mortality coefficient",
                                                   "search volume (obtained from beta and sigma)",
                                                   "weight at which 25% of individuals are mature","reproductive output scalar")
-)
+) #add biomass observed 
 
 knitr::kable(param_description, caption = "parameters' description")
 ```
 
+
+```{r}
+# mesoExample <- data.frame("species" = c("G. braueri", "K. anderssoni", "E. antarctica", "T. macrura", "Sergestes spp.", "E. similis", "E. tricantha", "Nannobranchium achirus", "Cyclothone spp.", "Bathylagus spp."),
+#                            "w_inf" = c(26.6, 13.8, 26.78, 0.318, 0.97, 0.417, 0.417, 58.3, 1.62, 81.43), 
+#                            "k_vb" = c(0.3, 0.7, 0.2, 0.43, 0.8, 0.6, 0.6, 0.4, 0.9, 0.5),
+#                           "biomass_observed" = c(x, x, x, x,31207122.47, 0, x, 14754272.5, 259870301.8, 48510538.9))
+#                            #"beta" = c(200,200)) #preferred size of prey...small means close to their size
+# knitr::kable(mesoExample, caption = "species' parameters")
+# 
+# mesoInter <- matrix(c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 1, 1, 1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1), ncol = 10, 
+#                      dimnames = list(mesoExample$species, mesoExample$species))
+# knitr::kable(mesoInter, caption = "species' interactions")
+
+```
+
+
 ## MesoMizer small example - interaction maxtrix based on likelihood of encounter in epipelagic zone only 
 
 ```{r}
-mesoExample <- data.frame("species" = c("G. braueri", "K. anderssoni", "E. antarctica", "T. macrura", "S. arcticus"),
-                           "w_inf" = c(26.6, 13.8, 26.78, 0.318, 0.97), 
-                           "k_vb" = c(0.3, 0.7, 0.2, 0.43, 0.8))
+mesoExample <- data.frame("species" = c("Sergestes spp.", "E. similis","Nannobranchium achirus", "Cyclothone spp.", "Bathylagus spp."),
+                           "w_inf" = c( 0.97, 0.417, 58.3, 1.62, 81.43), 
+                           "k_vb" = c(0.8, 0.6, 0.4, 0.9, 0.5),
+                          "biomass_observed" = c(38154637578, 62981401401, 22131408818, 149931551670, 50215438243), #this is biomass of lower mesopelagic during day                              of model domain
+                          "biomass_cutoff" = c(0.5, 0.5, 0.5,0.5,0.5))
                            #"beta" = c(200,200)) #preferred size of prey...small means close to their size
 knitr::kable(mesoExample, caption = "species' parameters")
 
@@ -52,10 +71,15 @@ mesoInter <- matrix(c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1), ncol =
                      dimnames = list(mesoExample$species, mesoExample$species))
 knitr::kable(mesoInter, caption = "species' interactions")
 
+mesoExample$biomass_observed <- mesoExample$biomass_observed/1000000 #convert g to tons
+
 
 ```
+
+
+
 ```{r}
-meso_p <- newMultispeciesParams(mesoExample, mesoInter, w_pp_cutoff = 1, )
+meso_p <- newMultispeciesParams(mesoExample, mesoInter, w_pp_cutoff = 1 )
 species_params(meso_p)
 
 mini_proj_params <- species_params(meso_p)
@@ -63,6 +87,49 @@ mini_proj_params <- species_params(meso_p)
 write.csv(mini_proj_params , "mini_project_params.csv")
 
 ```
+```{r}
+
+meso_p <- steady(meso_p)
+
+plotBiomassVsSpecies(meso_p)
+
+
+```
+
+```{r}
+calibrateBiomass(meso_p) #not reaching co-existence... must hand tweak things first 
+
+plotBiomassVsSpecies(meso_p)
+```
+
+```{r}
+matchBiomasses(meso_p)
+
+
+```
+
+
+
+
+```{r}
+params_v1 <- tuneParams(meso_p) #allows tuning of a range of params to calibrate model (biomass/size distribution etc) with observed
+params_v1@species_params$erepro # high erepro = marine mammal; to make sense theoretically it should be between 0 & 1 
+
+params_v2 <- calibrateBiomass(params_v1)
+
+plotBiomassVsSpecies(params_v2)
+
+```
+
+```{r}
+params_v2 <- tuneParams(params_v2)
+```
+
+
+```{r}
+plotBiomassVsSpecies(meso_p)
+```
+
 
 
 ```{r}
@@ -102,7 +169,7 @@ plotDiet(sim_meso@params)
 #Calibration with empiracle data--------------------------------------------
 
 ```{r}
-# meso_p@species_params$biomass_observed< <- empirical biomass data per species in g
+# meso_p@species_params$biomass_observed< <- empirical biomass data per species in g....we have in m-3... so we should multiply over entire model domain?
 ```
 
 
