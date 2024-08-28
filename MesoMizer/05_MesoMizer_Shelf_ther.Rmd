@@ -586,27 +586,27 @@ head(carrion_long)
 
 #approach 3: extract external contribution to carrion production
 
-carrion_production_per_species <- function(params_v1, n = params_v1@initial_n, 
+carrion_production_per_species <- function(params_v1, n = params_v1@initial_n,
                                            rates = getRates(params_v1)) {
     # Calculate natural mortality contribution to carrion per species
     mu_b_contribution <- (params_v1@mu_b * n) * (params_v1@w * params_v1@dw) *
                          params_v1@other_params$carrion$ext_prop
-    
+
     # Calculate gear mortality contribution to carrion per species
-    gear_mort_contribution <- (gearMort(params_v1, rates$f_mort) * n) * 
+    gear_mort_contribution <- (gearMort(params_v1, rates$f_mort) * n) *
                               (params_v1@w * params_v1@dw)
-    
+
     # Calculate discards contribution to carrion per species
     discards_contribution <- ((rates$f_mort * n) * (params_v1@w * params_v1@dw)) *
                              params_v1@species_params$discard
-    
+
     # Create a list to store carrion production per species
     carrion_per_species <- list(
         mu_b = mu_b_contribution,
         gear_mort = gear_mort_contribution,
         discards = discards_contribution
     )
-    
+
     return(carrion_per_species)
 }
 
