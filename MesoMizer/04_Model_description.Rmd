@@ -11,9 +11,8 @@ The model consists of five components:
 
 1) a collection of [species],
 2) [carrion],
-3) [detritus],
-4) [Carbon Injection Potential (CIP)] and 
-5) [DIC pools]
+3) [detritus], and
+4) [DIC pools]
 
 
 # 1 Species
@@ -669,18 +668,10 @@ n_pp is an array that has numerical plankton abundance for each size class. ther
 
 
 
-# 4 Carbon Injection potential (CIP)
 
 
-Carbon injection potential (CIP) is the taxon specific physiological rates that control how much carbon an individual can release in a given time period. This is estimated from the sum of metabolic waste (respired carbon, RC), detritus production (fecal carbon, FC) and carrion production (carcass carbon, CC). Note, excretory carbon not included. 
 
-
-$$
-CIP = RC + FC + CC
-$$
-
-
-# 5 DIC pools per depth layer
+# 4 DIC pools per depth layer
 
 RC gives us a DIC pool per depth layer but in order to determine the magnitude of these pools, we must include remineralised POC (from FC and CC). To do so, we need to account for the species specific sinking speeds of fecal pellets and carrion as well as microbial remineralization rates (constant?). We use Halfter et al., 2022 modification of Boyd and Trull (2007): #look for allometric equation in Debbies work
 
