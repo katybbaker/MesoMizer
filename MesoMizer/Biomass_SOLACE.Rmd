@@ -100,6 +100,23 @@ filter(Site == "SOTS")
 
 ```{r}
 
+Percentage_depth <- Mesomizer_species %>% 
+  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
+  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
+  summarise(StdWt = sum(Weight_Std_gm3_sp)) %>% #one weight per species per deployment
+  ungroup() %>%
+  group_by(Taxa_updated, Depth_Stratum, Site) %>% 
+  mutate(av_weight = mean(StdWt)) %>% 
+  ungroup() %>% 
+  select(Depth_Stratum, Taxa_updated, av_weight) %>% 
+  unique() %>% 
+  group_by(Taxa_updated) %>% 
+  mutate(total_weight = sum(av_weight)) %>% 
+  mutate(percent_depth = av_weight/total_weight*100) %>% 
+  select(Depth_Stratum, Taxa_updated, percent_depth)
+
+
+
 # Find biomass per species, depth & site
 Biomass_deployment <- Mesomizer_species %>%
   select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
@@ -108,7 +125,7 @@ Biomass_deployment <- Mesomizer_species %>%
   ungroup() %>%
   group_by(daylight, Taxa_updated, Depth_Stratum) %>%  
   summarise(weight_mean_depth = mean(StdWt)) %>% #one weight per species per day/night & depth (average deployments)
-  ungroup() %>% 
+   ungroup() %>% 
  mutate(g_m2 = case_when(
     Depth_Stratum == "E" ~ weight_mean_depth * 200,
     Depth_Stratum == "UM" ~ weight_mean_depth * 200,
@@ -132,10 +149,10 @@ write.csv(Biomass_deployment, "Biomass_av_wc.csv")
 #Find Biomass per model domain - not using this
 
 ```{r}
-Biomass_depth_tod <- Biomass_deployment %>%
-  mutate(Biomass_g = weight_total_gm3_sp * polygon_m3)
-
-write.csv(Biomass_depth_tod, "Biomass_depth_Tod.csv")
+# Biomass_depth_tod <- Biomass_deployment %>%
+#   mutate(Biomass_g = weight_total_gm3_sp * polygon_m3)
+# 
+# write.csv(Biomass_depth_tod, "Biomass_depth_Tod.csv")
 ```
 
 

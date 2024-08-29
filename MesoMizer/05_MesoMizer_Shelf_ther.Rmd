@@ -113,7 +113,7 @@ sp_1<- newMultispeciesParams(sp_1, sp_1_inter, w_pp_cutoff = 1 ) #double check w
 species_params(sp_1)
 
 
-tuneParams(sp_1)
+tuneParams(params_v1)
 
 params_v1 <- readRDS("tuned_params_sp1.rds")
 
@@ -148,7 +148,7 @@ Epi <- which(realm_names == "Epi")
 Umeso <- which(realm_names == "Umeso") 
 Lmeso <- which(realm_names == "Lmeso") 
 
-# Define a list of species and their corresponding time allocations - not accurate, will fill in later
+# Define a list of species and their corresponding time allocations - based on average % per depth from SOLACE (Biomass_SOLACE.rmd)
 species_allocations <- list(
   "Lampanyctus australis" = c(Epi = 0.21, Umeso = 0.57, Lmeso = 0.2),
   "Euphausia similis" = c(Epi = 0.79, Umeso = 0.14, Lmeso = 0.065),
@@ -358,12 +358,14 @@ RC_p <- ggplot(respired_carbon_long, aes(x = Size, y = Respired_Carbon, color = 
   scale_x_log10() +
   labs(title = "Respired Carbon per Size for Each Species",
        x = "Size (g)",
-       y = "RC (g C m-2 h-1)",
+       y = "g C m-2 h-1",
        color = "Species") +
   theme_minimal()
 
 # Display the plot
 print(RC_p)
+
+ggsave("RC.png", plot = RC_p)
 
 ```
 
@@ -451,7 +453,7 @@ feces_df <- feces_long %>%
   mutate(Fecal_Carbon = Feces_production *p_FC)
 
 
-ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Species))) +
+feces_p <- ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Species))) +
   geom_line() +
   scale_y_log10()+
   scale_x_log10() +
@@ -460,6 +462,10 @@ ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Species))) +
        y = "g C m-2 y-1",
        color = "Species") +
   theme_minimal()
+
+feces_p
+
+ggsave("FC.png", plot = feces_p)
 
 ```
 
@@ -472,24 +478,24 @@ ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Species))) +
 ```{r}
 #approach 1 - take carrion from proportion of detritus
 
-# Extract the feces matrix
-carrion_matrix <- detritus$carrion
-
-# Assign the correct column names (size bins)
-colnames(carrion_matrix) <- size_bins
-
-# Convert to a data frame and add species names
-carrion_df <- as.data.frame(carrion_matrix)
-carrion_df$Species <- rownames(carrion_matrix)
-
-# Reshape the data to long format
-
-carrion_long <- carrion_df %>%
-  pivot_longer(cols = -Species, names_to = "Size", values_to = "carrion_production") %>%
-  mutate(Size = as.numeric(Size))
-
-# View the final data frame
-print(carrion_long)
+# # Extract the feces matrix
+# carrion_matrix <- detritus$carrion
+# 
+# # Assign the correct column names (size bins)
+# colnames(carrion_matrix) <- size_bins
+# 
+# # Convert to a data frame and add species names
+# carrion_df <- as.data.frame(carrion_matrix)
+# carrion_df$Species <- rownames(carrion_matrix)
+# 
+# # Reshape the data to long format
+# 
+# carrion_long <- carrion_df %>%
+#   pivot_longer(cols = -Species, names_to = "Size", values_to = "carrion_production") %>%
+#   mutate(Size = as.numeric(Size))
+# 
+# # View the final data frame
+# print(carrion_long)
 
 
 
@@ -499,35 +505,35 @@ print(carrion_long)
 
 ```{r}
 
-# Extract the external mortality rates
-ext_mort <- getExtMort(params_v1)
-
-# Get the size spectrum (abundance) for each species
-n <- getN(params_v1)
-
-# Calculate carrion production
-carrion_production <- ext_mort * n
-
-
-# Assign the correct column names (size bins)
-colnames(carrion_production) <- size_bins
-
-# save it as a dataframe 
-carrion_df <- as.data.frame(carrion_production)
-carrion_df$Species <- rownames(carrion_production)
-
-
-
-# Reshape the data to long format
-
-carrion_long <- carrion_df %>%
-  pivot_longer(cols = -Species, names_to = "Size", values_to = "Carrion_production") %>%
-  mutate(Size = as.numeric(Size))
-
-
-
-# View the dataframe
-head(carrion_long)
+# # Extract the external mortality rates
+# ext_mort <- getExtMort(params_v1)
+# 
+# # Get the size spectrum (abundance) for each species
+# n <- getN(params_v1)
+# 
+# # Calculate carrion production
+# carrion_production <- ext_mort * n
+# 
+# 
+# # Assign the correct column names (size bins)
+# colnames(carrion_production) <- size_bins
+# 
+# # save it as a dataframe 
+# carrion_df <- as.data.frame(carrion_production)
+# carrion_df$Species <- rownames(carrion_production)
+# 
+# 
+# 
+# # Reshape the data to long format
+# 
+# carrion_long <- carrion_df %>%
+#   pivot_longer(cols = -Species, names_to = "Size", values_to = "Carrion_production") %>%
+#   mutate(Size = as.numeric(Size))
+# 
+# 
+# 
+# # View the dataframe
+# head(carrion_long)
 
 ```
 
@@ -536,38 +542,38 @@ head(carrion_long)
 
 ```{r}
 
-#approach 3: extract external contribution to carrion production
-
-carrion_production_per_species <- function(params_v1, n = params_v1@initial_n,
-                                           rates = getRates(params_v1)) {
-    # Calculate natural mortality contribution to carrion per species
-    mu_b_contribution <- (params_v1@mu_b * n) * (params_v1@w * params_v1@dw) *
-                         params_v1@other_params$carrion$ext_prop
-
-    # Calculate gear mortality contribution to carrion per species
-    gear_mort_contribution <- (gearMort(params_v1, rates$f_mort) * n) *
-                              (params_v1@w * params_v1@dw)
-
-    # Calculate discards contribution to carrion per species
-    discards_contribution <- ((rates$f_mort * n) * (params_v1@w * params_v1@dw)) *
-                             params_v1@species_params$discard
-
-    # Create a list to store carrion production per species
-    carrion_per_species <- list(
-        mu_b = mu_b_contribution,
-        gear_mort = gear_mort_contribution,
-        discards = discards_contribution
-    )
-
-    return(carrion_per_species)
-}
-
-# Assume params is already defined and get carrion production per species
-carrion <- carrion_production_per_species(params_v1)
-
-carrion
-
-getCarrionProduction(params_v1)
+# #approach 3: extract external contribution to carrion production
+# 
+# carrion_production_per_species <- function(params_v1, n = params_v1@initial_n,
+#                                            rates = getRates(params_v1)) {
+#     # Calculate natural mortality contribution to carrion per species
+#     mu_b_contribution <- (params_v1@mu_b * n) * (params_v1@w * params_v1@dw) *
+#                          params_v1@other_params$carrion$ext_prop
+# 
+#     # Calculate gear mortality contribution to carrion per species
+#     gear_mort_contribution <- (gearMort(params_v1, rates$f_mort) * n) *
+#                               (params_v1@w * params_v1@dw)
+# 
+#     # Calculate discards contribution to carrion per species
+#     discards_contribution <- ((rates$f_mort * n) * (params_v1@w * params_v1@dw)) *
+#                              params_v1@species_params$discard
+# 
+#     # Create a list to store carrion production per species
+#     carrion_per_species <- list(
+#         mu_b = mu_b_contribution,
+#         gear_mort = gear_mort_contribution,
+#         discards = discards_contribution
+#     )
+# 
+#     return(carrion_per_species)
+# }
+# 
+# # Assume params is already defined and get carrion production per species
+# carrion <- carrion_production_per_species(params_v1)
+# 
+# carrion
+# 
+# getCarrionProduction(params_v1)
 
 
 ```

@@ -364,8 +364,7 @@ taken directly from document).</p>
 <ol style="list-style-type: decimal">
 <li>a collection of [species],</li>
 <li>[carrion],</li>
-<li>[detritus],</li>
-<li>[Carbon Injection Potential (CIP)] and</li>
+<li>[detritus], and</li>
 <li>[DIC pools]</li>
 </ol>
 <div id="species" class="section level1">
@@ -2334,24 +2333,49 @@ migrators and the BGP. External is the BGP so values here are zero to
 avoid double accounting. Could remove this function….</p>
 <p><span class="math display">\[
 p_{D.ext}= 0
-\]</span></p>
+\]</span> # 4 Temperature effects</p>
+<p>By default, therMizer provides values for the realm,
+vertical_migration, and exposure parameters that are appropriate for
+most use cases.</p>
+<p>realm refers to the vertical realms or depth strata which species
+inhabit and for which temperatures will be provided. These could be
+named something like epipelagic, mesopelagic, surface, bottom, whatever
+you want to call them. These realms should be set up as the second
+dimension (or columns) of ocean_temp: one column per realm representing
+different time series of temperature. By default, if only one vector of
+temperature is supplied, there will be only one realm.</p>
+<p>vertical_migration simulates the proportion of time that a given size
+of a given species spends in a given realm. It has the dimensions of
+realm × sp × w. Values can range from 0 to 1, and must sum to 1 across
+all realms for each species and size. If values sum to something other
+than one, it means that either a portion of time is unaccounted for
+(&lt;1) or that time across realms is over-allocated (&gt;1). Either
+way, you’ll be modeling something that cannot be replicated in the real
+ocean. By default, species are assumed to spend equal time across all
+realms.</p>
+<p>exposure links vertical_migration to ocean_temp. It has the
+dimensions of realm × sp. The values are 1 for the realms to which a
+species is exposed and 0 elsewhere. In theory, you could set all values
+to 1 and, so long as vertical_migration is constructed correctly, get
+the same results (because when multiplied by exposure the result would
+still be 0 for realms in which species spend no time). By default, the
+exposure is set to 1 for all realms and species and therefore has no
+effects.</p>
+<p>ocean_temp is an array that has temperature(s) in degrees Celsius for
+each realm. It can be a vector, if temperature is constant over time, or
+an array for dynamic temperatures. If you’re using time-varying
+temperature, the array will have the dimensions of time × realm.</p>
+<p>n_pp is an array that has numerical plankton abundance for each size
+class. therMizer will convert these abundances to densities for use
+within mizer. n_pp can be a vector, if these abundances are constant
+over time, or an array for a dynamic resource. If you’re using
+time-varying plankton, the array will have the dimensions of time ×
+w.</p>
 </div>
 </div>
-</div>
-<div id="carbon-injection-potential-cip" class="section level1">
-<h1>4 Carbon Injection potential (CIP)</h1>
-<p>Carbon injection potential (CIP) is the taxon specific physiological
-rates that control how much carbon an individual can release in a given
-time period. This is estimated from the sum of metabolic waste (respired
-carbon, RC), detritus production (fecal carbon, FC) and carrion
-production (carcass carbon, CC). Note, excretory carbon not
-included.</p>
-<p><span class="math display">\[
-CIP = RC + FC + CC
-\]</span></p>
 </div>
 <div id="dic-pools-per-depth-layer" class="section level1">
-<h1>5 DIC pools per depth layer</h1>
+<h1>4 DIC pools per depth layer</h1>
 <p>RC gives us a DIC pool per depth layer but in order to determine the
 magnitude of these pools, we must include remineralised POC (from FC and
 CC). To do so, we need to account for the species specific sinking
