@@ -117,7 +117,7 @@ Now you will be able to host your R projects into GitHub repositories!
 Rstudio installed on linux server, such as when using a nectar instance, do not have a proper way to store credentials. The default behavior is limited to a cache with a lifespan of 900 seconds. To store your PAT, you need the credential R package
 
 ```{r}
-credentials::set_github_pat()
+#credentials::set_github_pat()
 ```
 
 Paste your token when prompted.
@@ -132,7 +132,7 @@ usethis::git_sitrep()
 Other solutions to store your PAT that didn't work for me:
 
 ```{bash}
-git config --global credential.helper store
+#git config --global credential.helper store
 
 ```
 
@@ -141,7 +141,7 @@ Then commit once using your username and PAT when prompted.
 Another solution is to set your PAT in your Renviron.r
 
 ```{r}
-usethis::edit_r_environ()
+#usethis::edit_r_environ()
 
 ```
 
