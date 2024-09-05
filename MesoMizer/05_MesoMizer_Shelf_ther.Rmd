@@ -246,20 +246,66 @@ ggplot(metabolic_rates_df, aes(x = Size, y = Metabolic_Rate, color = as.factor(S
        color = "Species") +
   theme_minimal()
 ```
+## incorporate abundances (n_initial)
+
+```{r}
+# Function to calculate respired carbon per species and size
+respired_carbon_per_species <- function(params_v1, 
+                                        n = params_v1@initial_n, 
+                                        n_other = params_v1@initial_n_other) {
+    # Get metabolic rates per species and size (g m-2 y-1)
+    metabolic_rates <- metab(params_v1)
+    
+    # Multiply metabolic rates by abundance for each species and size
+    respired_carbon <- sweep(metabolic_rates * n, 2, params_v1@dw, "*", check.margin = FALSE)
+    
+    # Return the respired carbon per species and size
+    return(respired_carbon)
+}
+
+# Call the function to get respired carbon
+respired_carbon <- respired_carbon_per_species(params_v1)
+
+species_names <- rownames(params_v1@species_params)
+size_bins <- params_v1@w
+
+# Extract the respiration matrix
+#respiration_matrix <- respired_carbon$respired_carbon
+
+# Assign the correct column names (size bins)
+colnames(respired_carbon) <- size_bins
+
+# Convert to a data frame and add species names
+respiration_df <- as.data.frame(respired_carbon)
+respiration_df$Species <- rownames(respired_carbon)
+
+# Reshape the data to long format
+
+respiration_long <- respiration_df %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "respiration_production") %>%
+  mutate(Size = as.numeric(Size))
+
+# View the final data frame
+print(respiration_long)
+
+# Plot using ggplot2 with log scale for size
+RC_p <- ggplot(respiration_long, aes(x = Size, y = respiration_production, color = Species)) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Respired weight (g) per Size for Each Species",
+       x = "Size (g)",
+       y = "g C m-2 h-1",
+       color = "Species") +
+  theme_minimal()
 
 
-## 1a. Convert Mizer metabolic rate (g y-1) to respiratory oxygen uptake (L h-1)
+```
+
+
+## 1a. Convert Mizer metabolic rate (g y-1) to respiratory oxygen uptake (L h-1) then respired carbon (g C m-2 h-1)
 
 
 ```{r}
-
-params <- params_v1  # replace params_v1 with actual MizerParams object
-
-# Extract the species parameters from the MizerParams object
-species_params <- params@species_params
-
-# Extract the size bins (w) from the MizerParams object
-size_bins <- params@w
 
 # Constants
 energy_content <- 22         # kJ per gram based on a mixed diet - could make this more dynamic to reflect feeding types
@@ -267,94 +313,38 @@ oxygen_conversion <- 20.1      # kJ per liter of O2
 hours_per_year <- 8760         # Number of hours in a year
 
 
-# Function to calculate respiratory oxygen uptake for each size class of a species
-calculate_resp_oxygen_uptake <- function(ks, p, size_bins, energy_content, oxygen_conversion, hours_per_year) {
-  # Calculate energy consumption rate in kJ/year for each size bin
-  oxygen_uptake_liters_year <- (ks * (size_bins^p) * energy_content)/ oxygen_conversion #ks * (size_bins^p) = standard metabolism
-  
-  # Convert oxygen uptake to liters per hour for each size bin
-  oxygen_uptake_L_hour <- oxygen_uptake_liters_year / hours_per_year
-  
-  return(oxygen_uptake_L_hour)
-}
+respired_carbon_df <- respiration_long %>% 
+  mutate(oxygen_uptake_liters_h = respiration_production * energy_content/oxygen_conversion/hours_per_year)
 
-# Initialize an empty list to store results for each species
-resp_oxygen_uptake_list <- list()
-
-# Loop over each species and calculate the respiratory oxygen uptake for all size bins
-for (i in 1:nrow(species_params)) {
-  ks <- species_params$ks[i]
-  p <- species_params$p[i]
-  
-  resp_oxygen_uptake <- calculate_resp_oxygen_uptake(ks, p, size_bins, 
-                                                     energy_content, oxygen_conversion, 
-                                                     hours_per_year)
-  
-  # Store the result in the list
-  resp_oxygen_uptake_list[[species_params$species[i]]] <- resp_oxygen_uptake
-}
-
-# Convert the list to a dataframe for easier handling
-resp_oxygen_uptake_df <- do.call(cbind, resp_oxygen_uptake_list)
-
-# Add the size bins as a column
-resp_oxygen_uptake_df <- data.frame(size_bins = size_bins, resp_oxygen_uptake_df)
-
-# Replace the "." in the column names with a space
-colnames(resp_oxygen_uptake_df) <- gsub("\\.", " ", colnames(resp_oxygen_uptake_df))
-
-# Display the resulting dataframe with respiratory oxygen uptake
-print(resp_oxygen_uptake_df)
-
-```
-## 1b. Convert respiratory oxygen uptake to respired carbon (g C m-2 h-1)
-
-```{r}
 # Define the conversion factor from oxygen uptake to carbon
 oxygen_to_carbon <- 12 / 22.4  # This is the factor (12/22.4) to convert oxygen to carbon
 
-# Extract the RQ values from the species parameters
-RQ_values <- species_params$RQ  # Assuming the column for RQ is named "RQ"
+# Add RQ values to the respired_carbon_df
+respired_carbon_df$RQ <- params_v1@species_params$RQ[match(respired_carbon_df$Species, params_v1@species_params$species)]
 
-# Function to calculate respired carbon using species-specific RQ
-calculate_respired_carbon <- function(resp_oxygen_uptake, RQ, oxygen_to_carbon) {
-  respired_carbon <- resp_oxygen_uptake * RQ * oxygen_to_carbon
-  return(respired_carbon)
-}
+# View the updated dataframe
+head(respired_carbon_df)
 
 
-# Initialize an empty dataframe to store the respired carbon values
-respired_carbon_df <- resp_oxygen_uptake_df
+respired_carbon_df <- respired_carbon_df %>% 
+  mutate(respired_carbon = oxygen_uptake_liters_h * RQ * oxygen_to_carbon)
 
 
-# Loop over each species to calculate respired carbon
-for (i in 2:ncol(resp_oxygen_uptake_df)) {
-  species_name <- colnames(resp_oxygen_uptake_df)[i]
-  RQ <- RQ_values[i - 1]  # RQ for the specific species
-  
-  # Apply the conversion to get respired carbon
-  respired_carbon_df[[species_name]] <- calculate_respired_carbon(resp_oxygen_uptake_df[[species_name]], RQ, oxygen_to_carbon)
-}
+
 
 ```
+
+
+
+
+
 
 
 ## plot
 
 ```{r}
-
-
-# Reshape the dataframe to long format
-respired_carbon_long <- respired_carbon_df %>%
-  pivot_longer(
-    cols = -size_bins,                # All columns except size_bins
-    names_to = "Species",             # New column for species names
-    values_to = "Respired_Carbon"     # New column for respired carbon values
-  ) %>%
-  rename(Size = size_bins)            # Rename size_bins to Size for consistency
-
 # Plot using ggplot2 with log scale for size
-RC_p <- ggplot(respired_carbon_long, aes(x = Size, y = Respired_Carbon, color = Species)) +
+RC_p <- ggplot(respired_carbon_df, aes(x = Size, y = respired_carbon, color = Species)) +
   geom_line() +
   scale_x_log10() +
   labs(title = "Respired Carbon per Size for Each Species",
@@ -378,7 +368,7 @@ ggsave("RC.png", plot = RC_p)
 ```{r}
 
 detritus_production_per_species <- function(params_v1, n = params_v1@initial_n, # in MizerShelf, detritus production includes feces, decomposing carrion and external. For now we only want to extract feces, but we'll keep the other functions in at this stage.
-                                            n_other = params_v1@initial_n_other,
+                                            n_other = params_v1@initial_n_other, #resource?
                                             rates = getRates(params_v1)) {
     # Calculate the consumption for each species
     consumption <- sweep((1 - rates$feeding_level) * rates$encounter * n, 2,
@@ -451,7 +441,7 @@ feces_long <- merge(feces_long, p_FC_df, by = "Species", all.x = TRUE)
 
 # Calculate Fecal Carbon (FC)
 feces_df <- feces_long %>%
-  mutate(Fecal_Carbon = Feces_production *p_FC)
+  mutate(Fecal_Carbon = Feces_production *p_FC/hours_per_year)
 
 
 feces_p <- ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Species))) +
@@ -460,7 +450,7 @@ feces_p <- ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Sp
   scale_x_log10() +
   labs(title = "Fecal Carbon per Size for Each Species",
        x = "Size (g)",
-       y = "g C m-2 y-1",
+       y = "g C m-2 h-1",
        color = "Species") +
   theme_minimal()
 
@@ -503,9 +493,30 @@ ggsave("FC.png", plot = feces_p)
 ```
 
 ## 3b. Approach 2 - manually extract species specific external mortality rates and multiply by weight. However, extmort is constant so size is not taken into account.
-```{r}
 
-ext_mort_rates <- getExtMort(params_v1) # use this -> multiply by 0.17 (ext_prop set by mizer shelf) -> multiply by each size class
+
+```{r}
+# Function to calculate respired carbon per species and size
+carcass_carbon_per_species <- function(params_v1, 
+                                        n = params_v1@initial_n, 
+                                        n_other = params_v1@initial_n_other) {
+    # Get metabolic rates per species and size (g m-2 y-1)
+    ext_mort_rates <- getExtMort(params_v1)
+    
+    # Multiply metabolic rates by abundance for each species and size
+    ext_mort_rates <- sweep(ext_mort_rates * n, 2, params_v1@dw, "*", check.margin = FALSE)
+    
+    # Return the respired carbon per species and size
+    return(ext_mort_rates)
+}
+
+# Call the function to get respired carbon
+ext_mort_rates <- carcass_carbon_per_species(params_v1)
+
+species_names <- rownames(params_v1@species_params)
+size_bins <- params_v1@w
+
+
 
 # Assign the correct column names (size bins)
 colnames(ext_mort_rates) <- size_bins
@@ -517,17 +528,31 @@ ext_mort_rates_df$Species <- rownames(ext_mort_rates)
 # Reshape the data to long format
 
 ext_mort_rates_long <- ext_mort_rates_df %>%
-  pivot_longer(cols = -Species, names_to = "Size", values_to = "ext_mort_rate") %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "ext_mort_rates") %>%
   mutate(Size = as.numeric(Size))
 
+# View the final data frame
+print(ext_mort_rates_long)
 
-# 
-# # Convert metabolic rates array to long-format data frame
-# ext_mort_rates_df <- melt(ext_mort_rates, varnames = c("Species", "Size"), value.name = "ext_mort_Rate")
+# Plot using ggplot2 with log scale for size
+CC_p <- ggplot(ext_mort_rates_long, aes(x = Size, y = ext_mort_rates, color = Species)) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Carcass weight (g) per Size for Each Species",
+       x = "Size (g)",
+       y = "g C m-2 h-1",
+       color = "Species") +
+  theme_minimal()
+
+```
+
+
+```{r}
+
 
 carcass_carbon_df <- ext_mort_rates_long %>% 
-  mutate(g_C = Size * 0.4) %>% # change this to species specific carbon content
-  mutate(carcass_C = g_C * ext_mort_rate * 0.1713287) #constant taken from MizerShelf - proportion of ext_mort that produces carrion
+  mutate(g_C = ext_mort_rates * 0.4) %>% # change this to species specific carbon content
+  mutate(carcass_C = g_C * 0.1713287/hours_per_year) #constant taken from MizerShelf - proportion of ext_mort that produces carrion
 
 
 carrion_p <- ggplot(carcass_carbon_df, aes(x = Size, y = carcass_C, color = as.factor(Species))) +
@@ -536,7 +561,7 @@ carrion_p <- ggplot(carcass_carbon_df, aes(x = Size, y = carcass_C, color = as.f
   scale_x_log10() +
   labs(title = "Carcass Carbon per Size for Each Species",
        x = "Size (g)",
-       y = "g C m-2 y-1",
+       y = "g C m-2 h-1",
        color = "Species") +
   theme_minimal()
 
@@ -597,7 +622,7 @@ ggsave("CC.png", plot = carrion_p)
 ```{r}
 
 # First, merge respired_carbon_long and feces_df
-combined_df1 <- merge(respired_carbon_long, feces_df, by = c("Species", "Size"))
+combined_df1 <- merge(respired_carbon_df, feces_df, by = c("Species", "Size"))
 
 # Then, merge the result with carcass_carbon_df
 combined_df <- merge(combined_df1, carcass_carbon_df, by = c("Species", "Size"))
@@ -664,23 +689,38 @@ head(final_df)
 
 ```
 
-## Plot DIC (respiratory carbon)
+## Create Carbon pools dataframe
 
 ```{r}
 
-carbon_pools <- final_df %>% 
-  group_by(Species) %>% 
-  mutate(total_DIC = sum(Respired_Carbon)) %>% 
-  mutate(total_POC = sum(Fecal_Carbon) +sum(carcass_C)) %>% 
-  select(Species, total_DIC, total_POC, P_Epi, P_Umeso, P_Lmeso) %>% 
-  unique() %>% 
-  mutate(DIC_Epi = total_DIC * P_Epi *7, #based on hours at surface from SOLACE (not species specific)
-         DIC_Umeso = total_DIC * P_Umeso * 2,
-         DIC_Lmeso = total_DIC * P_Lmeso *15,
-         POC_Epi = total_POC * P_Epi *7 , 
-         POC_Umeso = total_POC * P_Umeso * 2,
-         POC_Lmeso = total_POC * P_Lmeso *15,) %>% 
+DIC_POC <- final_df %>% 
+rowwise() %>%
+  mutate(total_DIC = sum(respired_carbon),
+         total_POC = sum(Fecal_Carbon, carcass_C)) %>%
   ungroup()
+
+
+carbon_pools <- DIC_POC %>% 
+  select(Species, total_DIC, total_POC, P_Epi, P_Umeso, P_Lmeso) %>% 
+  group_by(Species) %>% 
+  mutate(g_POC_m2_h = sum(total_POC),
+         g_DIC_m2_h = sum(total_DIC)) %>% 
+  ungroup() %>% 
+  select(Species, g_POC_m2_h, g_DIC_m2_h,P_Epi, P_Umeso, P_Lmeso) %>% 
+  unique() %>% 
+  mutate(DIC_Epi = g_DIC_m2_h *24* P_Epi, #based on % of species specific biomass per layer
+         DIC_Umeso = g_DIC_m2_h *24* P_Umeso,
+         DIC_Lmeso = g_DIC_m2_h *24* P_Lmeso,
+         POC_Epi = g_POC_m2_h *24* P_Epi,
+         POC_Umeso = g_POC_m2_h *24* P_Umeso,
+         POC_Lmeso = g_POC_m2_h *24* P_Lmeso)
+   
+
+```
+
+## Plot DIC
+
+```{r}
 
 # Gather the data into a long format for plotting
 DIC_long <- carbon_pools %>%
@@ -701,8 +741,11 @@ DIC_pools <- ggplot(DIC_long, aes(x = DIC, y = Layer, fill = Species)) +
 DIC_pools
 
 ggsave("DIC_pools.png", plot = DIC_pools)
-
 ```
+
+
+
+
 
 #POC (fecal & carcass carbon) -> need to add in sinking and remineralization rates & add to above DIC plot
 
@@ -721,7 +764,7 @@ POC_long <- carbon_pools %>%
 POC_pools <- ggplot(POC_long, aes(x = POC, y = Layer, fill = Species)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
-  labs(x = "g C m-2 y-1", y = "Depth Stratum") +
+  labs(x = "g C m-2 d-1", y = "Depth Stratum") +
   scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
   theme(legend.title = element_blank())
 
