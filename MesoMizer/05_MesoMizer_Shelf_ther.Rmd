@@ -114,7 +114,7 @@ species_params(sp_1)
 
 params_v1 <- readRDS("tuned_params_sp1.rds")
 
-tuneParams(params_v1)
+params_v1 <- tuneParams(params_v1)
 
 
 
@@ -775,8 +775,86 @@ ggsave("POC_pools.png", plot = POC_pools)
 
 ```
 
+# add in microbial remineralisation rates
+
+```{r}
+#From Petiteau et al. submitted: average microbial remin rate (Kmicrob) from C-RESPIRE trap = 0.11 +/- 0.05 d-1
+# attempt 1 - apply this rate to POC through entire water column
+
+# Assume you have a microbial remineralization rate (Kmicrob)
+Kmicrob <- 0.11  #Petiteau et al. SOTS during SOLACE
+
+# check this - i think sinking is wrong...........coding not right....
+POC_DIC <- POC_long %>%
+  group_by(Species) %>%
+  mutate(
+    DIC_epi = ifelse(Layer == "POC_Epi", POC * Kmicrob, 0),  # DIC from Epi
+    POC_sink_to_umeso = ifelse(Layer == "POC_Epi", (1- (POC * Kmicrob)), 0),  # Remaining POC that sinks to Umeso
+    DIC_umeso = ifelse(Layer == "POC_Umeso", (POC + lag(POC_sink_to_umeso, default = 0)) * Kmicrob, 0),  # DIC in Umeso
+    POC_sink_to_lmeso = ifelse(Layer == "POC_Umeso", (1-(POC + lag(POC_sink_to_umeso, default = 0)) * Kmicrob), 0),  # POC sinks to Lmeso
+    DIC_lmeso = ifelse(Layer == "POC_Lmeso", ((POC + lag(POC_sink_to_lmeso, default = 0))) * Kmicrob, 0)  # DIC in Lmeso
+  ) %>%
+  ungroup() %>% 
+  select(Species, DIC_epi, DIC_umeso, DIC_lmeso)
+
+# Reshape the dataframe from wide to long format
+POC_DIC_long <- POC_DIC %>%
+  pivot_longer(cols = c(DIC_epi, DIC_umeso, DIC_lmeso), 
+               names_to = "Layer", 
+               values_to = "DIC") %>%
+  mutate(Layer = case_when(
+    Layer == "DIC_epi" ~ "Epi",
+    Layer == "DIC_umeso" ~ "Umeso",
+    Layer == "DIC_lmeso" ~ "Lmeso"
+  ))
+
+# Create the horizontal bar plot
+POC_DIC_pools <- ggplot(POC_DIC_long, aes(x = DIC, y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "DIC (g C m-2 d-1)", y = "Depth Stratum") +
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(legend.title = element_blank())
+
+# Plot the graph
+POC_DIC_pools
+
+
+```
+#combine with respired DIC
+
+```{r}
+
+DIC_long <- DIC_long %>%
+  mutate(Layer = case_when(
+    Layer == "DIC_Epi" ~ "Epi",
+    Layer == "DIC_Umeso" ~ "Umeso",
+    Layer == "DIC_Lmeso" ~ "Lmeso",
+    TRUE ~ Layer  # Keep any other values unchanged
+  ))
+
+# Merge DIC_long and POC_DIC_long by Species and layer
+merged_df <- left_join(DIC_long, POC_DIC_long, by = c("Species", "Layer"))
+
+merged_df <- merged_df %>%
+  mutate(
+    Total_DIC = DIC.x + DIC.y  # Assuming DIC from DIC_long is DIC.x and from POC_DIC_long is DIC.y
+  ) %>% 
+  select(Species, Layer, Total_DIC)
+
+# Create the horizontal bar plot
+Total_DIC_pools <- ggplot(merged_df, aes(x = Total_DIC, y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "DIC (g C m-2 d-1)", y = "Depth Stratum") +
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(legend.title = element_blank())
+
+# Plot the graph
+Total_DIC_pools
 
 
 
+```
 
 
