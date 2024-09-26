@@ -20,6 +20,9 @@ library(mizerShelf)
 #install.packages("remotes")
 #remotes::install_github("sizespectrum/therMizer")
 library(therMizer)
+#install.packages("sensobol")
+library(sensobol)
+library(sensitivity)
  
  rm(list =ls()) # clear memory
  
@@ -112,12 +115,12 @@ knitr::kable(sp_1_inter, caption = "species' interactions")
 sp_1<- newMultispeciesParams(sp_1, sp_1_inter, w_pp_cutoff = 1 ) #double check w_pp_cutoff
 species_params(sp_1)
 
-params_v1 <- readRDS("tuned_params_sp1.rds")
+params_v1 <- readRDS("tuned_params_sp2.rds")
 
 params_v1 <- tuneParams(params_v1)
 
 
-
+plotSpectra(params_v1)
 ```
 # Thermizer -> set thermal tolerances for species
 
@@ -157,7 +160,7 @@ species_allocations <- list(
   "Sergestes spp" = c(Epi = 0.46, Umeso = 0.19, Lmeso = 0.35),
   "Themisto spp" = c(Epi = 0.57, Umeso = 0.14, Lmeso = 0.29),
   "Nannobrachium achirus" = c(Epi = 0, Umeso = 0, Lmeso = 1),
-  "Cyclothone spp" = c(Epi = 0.056, Umeso = 0.028, Lmeso = 0.91),
+  "Cyclothone spp" = c(Epi = 0.056, Umeso = 0.028, Lmeso = 0.91), 
   "Bathylagus spp" = c(Epi = 0, Umeso = 0, Lmeso = 1),
   "Cranchidae" = c(Epi = 0.76, Umeso = 0.038, Lmeso = 0.19),
   "Chaetognath" = c(Epi = 0.80, Umeso = 0.07, Lmeso = 0.12),
@@ -441,22 +444,23 @@ feces_long <- merge(feces_long, p_FC_df, by = "Species", all.x = TRUE)
 
 # Calculate Fecal Carbon (FC)
 feces_df <- feces_long %>%
-  mutate(Fecal_Carbon = Feces_production *p_FC/hours_per_year)
+  mutate(Fecal_Carbon = Feces_production *p_FC/hours_per_year,
+          Fecal_Carbon_mg = Fecal_Carbon * 1000)  # Convert to milligrams)  
 
 
-feces_p <- ggplot(feces_df, aes(x = Size, y = Fecal_Carbon, color = as.factor(Species))) +
+feces_p <- ggplot(feces_df, aes(x = Size, y = Fecal_Carbon_mg, color = as.factor(Species))) +
   geom_line() +
   scale_y_log10()+
   scale_x_log10() +
   labs(title = "Fecal Carbon per Size for Each Species",
        x = "Size (g)",
-       y = "g C m-2 h-1",
+       y = "mg C m-2 h-1",
        color = "Species") +
   theme_minimal()
 
 feces_p
 
-ggsave("FC.png", plot = feces_p)
+ggsave("FC.png", plot = feces_p,  width = 7, height = 5)
 
 ```
 
@@ -718,29 +722,36 @@ carbon_pools <- DIC_POC %>%
 
 ```
 
-## Plot DIC
+## Plot respired DIC 
 
 ```{r}
 
 # Gather the data into a long format for plotting
-DIC_long <- carbon_pools %>%
+DIC_injection_resp_df <- carbon_pools %>%
   select(Species, DIC_Epi, DIC_Umeso, DIC_Lmeso) %>%
   pivot_longer(cols = c(DIC_Epi, DIC_Umeso, DIC_Lmeso), 
                names_to = "Layer", 
                values_to = "DIC") %>%
-  mutate(Layer = factor(Layer, levels = c("DIC_Lmeso", "DIC_Umeso", "DIC_Epi")))
+  mutate(
+    Layer = recode(Layer,
+                   "DIC_Epi" = "Epi",
+                   "DIC_Umeso" = "Umeso",
+                   "DIC_Lmeso" = "Lmeso"),
+    Layer = factor(Layer, levels = c("Lmeso", "Umeso", "Epi"))
+  )
+
 
 # Create the horizontal bar plot
-DIC_pools <- ggplot(DIC_long, aes(x = DIC, y = Layer, fill = Species)) +
+DIC_injection_resp_p <- ggplot(DIC_injection_resp_df, aes(x = DIC, y = Layer, fill = Species)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
   labs(x = "g C m-2 d-1", y = "Depth Stratum") +
   scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
   theme(legend.title = element_blank())
 
-DIC_pools
+DIC_injection_resp_p
 
-ggsave("DIC_pools.png", plot = DIC_pools)
+ggsave("DIC_injection_resp_p.png", plot = DIC_injection_resp_p)
 ```
 
 
@@ -753,24 +764,30 @@ ggsave("DIC_pools.png", plot = DIC_pools)
 
 
 # Gather the data into a long format for plotting
-POC_long <- carbon_pools %>%
+POC_injection_df <- carbon_pools %>%
   select(Species, POC_Epi, POC_Umeso, POC_Lmeso) %>%
   pivot_longer(cols = c(POC_Epi, POC_Umeso, POC_Lmeso), 
                names_to = "Layer", 
                values_to = "POC") %>%
-  mutate(Layer = factor(Layer, levels = c("POC_Lmeso", "POC_Umeso", "POC_Epi")))
+  mutate(Layer = factor(Layer, levels = c("POC_Lmeso", "POC_Umeso", "POC_Epi")),
+    Layer = recode(Layer,
+                   "POC_Epi" = "Epi",
+                   "POC_Umeso" = "Umeso",
+                   "POC_Lmeso" = "Lmeso"),
+    Layer = factor(Layer, levels = c("Lmeso", "Umeso", "Epi"))
+  )
 
 # Create the horizontal bar plot
-POC_pools <- ggplot(POC_long, aes(x = POC, y = Layer, fill = Species)) +
+POC_injection_p <- ggplot(POC_injection_df , aes(x = POC, y = Layer, fill = Species)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
   labs(x = "g C m-2 d-1", y = "Depth Stratum") +
   scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
   theme(legend.title = element_blank())
 
-POC_pools
+POC_injection_p
 
-ggsave("POC_pools.png", plot = POC_pools)
+ggsave("POC_injection_p.png", plot = POC_injection_p)
 
 
 ```
@@ -778,38 +795,53 @@ ggsave("POC_pools.png", plot = POC_pools)
 # add in microbial remineralisation rates
 
 ```{r}
-#From Petiteau et al. submitted: average microbial remin rate (Kmicrob) from C-RESPIRE trap = 0.11 +/- 0.05 d-1
-# attempt 1 - apply this rate to POC through entire water column
+convert_POC_to_DIC <- function(POC_injection_df, Kmicrob = 0.11) {
+  
+  # Create an empty dataframe to store DIC results
+  DIC_long <- POC_injection_df
+  DIC_long$DIC <- 0  # Initialize DIC column with zeros
 
-# Assume you have a microbial remineralization rate (Kmicrob)
-Kmicrob <- 0.11  #Petiteau et al. SOTS during SOLACE
+  # Get unique species
+  species_list <- unique(POC_injection_df$Species)
 
-# check this - i think sinking is wrong...........coding not right....
-POC_DIC <- POC_long %>%
-  group_by(Species) %>%
-  mutate(
-    DIC_epi = ifelse(Layer == "POC_Epi", POC * Kmicrob, 0),  # DIC from Epi
-    POC_sink_to_umeso = ifelse(Layer == "POC_Epi", (1- (POC * Kmicrob)), 0),  # Remaining POC that sinks to Umeso
-    DIC_umeso = ifelse(Layer == "POC_Umeso", (POC + lag(POC_sink_to_umeso, default = 0)) * Kmicrob, 0),  # DIC in Umeso
-    POC_sink_to_lmeso = ifelse(Layer == "POC_Umeso", (1-(POC + lag(POC_sink_to_umeso, default = 0)) * Kmicrob), 0),  # POC sinks to Lmeso
-    DIC_lmeso = ifelse(Layer == "POC_Lmeso", ((POC + lag(POC_sink_to_lmeso, default = 0))) * Kmicrob, 0)  # DIC in Lmeso
-  ) %>%
-  ungroup() %>% 
-  select(Species, DIC_epi, DIC_umeso, DIC_lmeso)
+  # Iterate over each species
+  for (species in species_list) {
+    
+    # Subset POC data for the species
+    POC_species <- subset(POC_injection_df, Species == species)
+    
+    # Calculate DIC for the Epi layer
+    DIC_Epi <- POC_species$POC[POC_species$Layer == "Epi"] * Kmicrob
+    
+    # Calculate POC that sinks to Umeso
+    POC_Umeso_influx <- POC_species$POC[POC_species$Layer == "Epi"] * (1 - Kmicrob)
+    
+    # Calculate DIC for the Umeso layer
+    DIC_Umeso <- (POC_species$POC[POC_species$Layer == "Umeso"] + POC_Umeso_influx) * Kmicrob
+    
+    # Calculate POC that sinks to Lmeso
+    POC_Lmeso_influx <- (POC_species$POC[POC_species$Layer == "Umeso"] + POC_Umeso_influx) * (1 - Kmicrob)
+    
+    # Calculate DIC for the Lmeso layer
+    DIC_Lmeso <- (POC_species$POC[POC_species$Layer == "Lmeso"] + POC_Lmeso_influx) * Kmicrob
+    
+    # Update the DIC_long dataframe with the new DIC values
+    DIC_long$DIC[DIC_long$Species == species & DIC_long$Layer == "Epi"] <- DIC_Epi
+    DIC_long$DIC[DIC_long$Species == species & DIC_long$Layer == "Umeso"] <- DIC_Umeso
+    DIC_long$DIC[DIC_long$Species == species & DIC_long$Layer == "Lmeso"] <- DIC_Lmeso
+  }
 
-# Reshape the dataframe from wide to long format
-POC_DIC_long <- POC_DIC %>%
-  pivot_longer(cols = c(DIC_epi, DIC_umeso, DIC_lmeso), 
-               names_to = "Layer", 
-               values_to = "DIC") %>%
-  mutate(Layer = case_when(
-    Layer == "DIC_epi" ~ "Epi",
-    Layer == "DIC_umeso" ~ "Umeso",
-    Layer == "DIC_lmeso" ~ "Lmeso"
-  ))
+  return(DIC_long)
+}
+
+# Example usage:
+DIC_to_POC_df <- convert_POC_to_DIC(POC_injection_df)
+
+DIC_to_POC_df<- DIC_to_POC_df %>% 
+  select(-POC)
 
 # Create the horizontal bar plot
-POC_DIC_pools <- ggplot(POC_DIC_long, aes(x = DIC, y = Layer, fill = Species)) +
+POC_to_DIC_p <- ggplot(DIC_to_POC_df, aes(x = DIC, y = Layer, fill = Species)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
   labs(x = "DIC (g C m-2 d-1)", y = "Depth Stratum") +
@@ -817,36 +849,89 @@ POC_DIC_pools <- ggplot(POC_DIC_long, aes(x = DIC, y = Layer, fill = Species)) +
   theme(legend.title = element_blank())
 
 # Plot the graph
-POC_DIC_pools
+POC_to_DIC_p
+
+```
+Total POC "injected" = 0.0225 g
+Total DIC  = 0.0053 g total DIC respired = 0.12
+
+Difference of 0.0172 g -> 17.2 mg. According to this model 17.2 mg of POC sunk below 1000 m. However, we have not accounted for grazing by detritivores... should be higher DIC in upper layers. 
+
+
+
+
+
+
+```{r}
+#From Petiteau et al. submitted: average microbial remin rate (Kmicrob) from C-RESPIRE trap = 0.11 +/- 0.05 d-1
+# attempt 1 - apply this rate to POC through entire water column
+
+# # microbial remineralization rate 
+# Kmicrob <- 0.11  #Petiteau et al. SOTS during SOLACE
+# 
+# POC_long <- POC_long %>%
+#   mutate(
+#      Layer = recode(Layer,
+#                    "POC_Epi" = "Epi",
+#                    "POC_Umeso" = "Umeso",
+#                    "POC_Lmeso" = "Lmeso"))
+# 
+# POC_DIC <- POC_long %>%
+#   mutate(
+#      Layer = recode(Layer,
+#                    "POC_Epi" = "Epi",
+#                    "POC_Umeso" = "Umeso",
+#                    "POC_Lmeso" = "Lmeso"),
+#     DIC_retained = POC * Kmicrob,
+#     POC_sinking = POC * (1-Kmicrob)
+#   ) 
+# 
+# DIC_pools_df <- POC_DIC %>% 
+#   select(Species, Layer, DIC_retained, POC_sinking) %>% 
+#   group_by(Species) %>%
+#   arrange(Species, Layer) %>%
+#   mutate(
+#     total_DIC = case_when(
+#       Layer == "Epi" ~ DIC_retained,
+#       Layer == "Umeso" ~ DIC_retained + lag(POC_sinking, default = 0),
+#       Layer == "Lmeso" ~ DIC_retained + lag(POC_sinking, default = 0))) %>% 
+#   ungroup()
+# 
+# 
+# # Create the horizontal bar plot
+# DIC_resp_pools <- ggplot(DIC_pools_df, aes(x = total_DIC, y = Layer, fill = Species)) +
+#   geom_bar(stat = "identity") +
+#   theme_minimal() +
+#   labs(x = "DIC (g C m-2 d-1)", y = "Depth Stratum") +
+#   scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+#   theme(legend.title = element_blank())
+# 
+# # Plot the graph
+# DIC_resp_pools
 
 
 ```
+
+
 #combine with respired DIC
 
 ```{r}
 
-DIC_long <- DIC_long %>%
-  mutate(Layer = case_when(
-    Layer == "DIC_Epi" ~ "Epi",
-    Layer == "DIC_Umeso" ~ "Umeso",
-    Layer == "DIC_Lmeso" ~ "Lmeso",
-    TRUE ~ Layer  # Keep any other values unchanged
-  ))
 
 # Merge DIC_long and POC_DIC_long by Species and layer
-merged_df <- left_join(DIC_long, POC_DIC_long, by = c("Species", "Layer"))
+merged_df <- left_join(DIC_to_POC_df, DIC_injection_resp_df, by = c("Species", "Layer"))
 
 merged_df <- merged_df %>%
   mutate(
-    Total_DIC = DIC.x + DIC.y  # Assuming DIC from DIC_long is DIC.x and from POC_DIC_long is DIC.y
-  ) %>% 
-  select(Species, Layer, Total_DIC)
+    Total_DIC = DIC.x + DIC.y,  # Assuming DIC from DIC_to_POC_df is DIC.x and from POC_DIC_long is DIC.y
+  total_DIC_mg = Total_DIC * 1000) %>%   # Convert to milligrams)  
+  select(Species, Layer, total_DIC_mg )
 
 # Create the horizontal bar plot
-Total_DIC_pools <- ggplot(merged_df, aes(x = Total_DIC, y = Layer, fill = Species)) +
+Total_DIC_pools <- ggplot(merged_df, aes(x = total_DIC_mg , y = Layer, fill = Species)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
-  labs(x = "DIC (g C m-2 d-1)", y = "Depth Stratum") +
+  labs(x = "DIC (mg C m-2 d-1)", y = "Depth Stratum") +
   scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
   theme(legend.title = element_blank())
 
@@ -855,6 +940,184 @@ Total_DIC_pools
 
 
 
+ggsave("Total_DIC_pools.png", plot = Total_DIC_pools)
+
 ```
+```{r}
+
+# Modify the plot with larger text
+Total_DIC_pools_white <- ggplot(merged_df, aes(x = total_DIC_mg , y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "DIC (mg C m-2 d-1)", y = "Depth Stratum") +
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(
+    legend.title = element_blank(),
+    axis.title.x = element_text(color = "white", size = 16),
+    axis.title.y = element_text(color = "white", size = 16),
+    axis.text.x = element_text(color = "white", size = 14),
+    axis.text.y = element_text(color = "white", size = 14),
+    plot.title = element_text(color = "white", size = 18),
+    legend.text = element_text(color = "white", size = 14),
+    panel.grid.major = element_line(color = "white"),
+    panel.grid.minor = element_line(color = "white"),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    panel.background = element_rect(fill = "transparent", color = NA),
+    legend.background = element_rect(fill = "transparent", color = NA)
+  )
+
+# Save the plot with larger text and adjusted width and height
+ggsave("Total_DIC_pools_white.png", plot = Total_DIC_pools_white, width = 7, height = 5)
+
+
+```
+
+
+
+
+
+# sobol sensitivity analysis
+
+# 1. Dummy model
+```{r}
+
+# Step 1: Define a simple dummy model
+dummy_model <- function(X) {
+  a <- X[, 1]
+  b <- X[, 2]
+  c <- X[, 3]
+  
+  # Example model: output = a * b + c^2
+  output <- a * b + c^2
+  return(output)
+}
+
+# Step 2: Define the parameter bounds for the Sobol analysis
+# Parameter ranges:
+# a ∈ [0.5, 2], b ∈ [1, 3], c ∈ [0, 1]
+
+# Create a function to sample the parameters using uniform distribution
+param_sample <- function(N) {
+  a <- runif(N, 0.5, 2)
+  b <- runif(N, 1, 3)
+  c <- runif(N, 0, 1)
+  return(cbind(a, b, c))
+}
+
+
+
+```
+
+# 2. Attempt 1
+```{r}
+# # Define the function to run the Mizer model and get the community slope
+# run_mizer_model <- function(k_vb, w_inf, beta) {
+#   # Update species parameters in params_v1 for each species
+#   params_v1@species_params$k_vb <- k_vb
+#   params_v1@species_params$w_inf <- w_inf
+#   params_v1@species_params$beta <- beta
+#   
+#   # Run the Mizer model
+#   results <- project(params_v1)
+#   
+#   # Extract the community size spectrum slope
+#   community_slope <- getCommunitySlope(results)
+#   
+#   # Return the community slope as output
+#   return(community_slope)
+# }
+# 
+# Define the base parameters for all 13 species
+k_vb <- params_v1@species_params$k_vb  # Growth rate for each species
+w_inf <- params_v1@species_params$w_inf  # Asymptotic weight for each species
+beta <- params_v1@species_params$beta  # Predator-prey mass ratio for each species
+# 
+# 
+# Define the ranges for each species' parameters (±10%)
+k_vb_lower <- k_vb * 0.9
+k_vb_upper <- k_vb * 1.1
+w_inf_lower <- w_inf * 0.9
+w_inf_upper <- w_inf * 1.1
+beta_lower <- beta * 0.9
+beta_upper <- beta * 1.1
+
+
+
+
+
+```
+
+
+
+# 3. attempt 3
+```{r}
+# Function to adjust parameters by ±10%, run a simulation, and get the total community biomass at the last timestep
+mizer_model <- function(X) {
+  # Copy params_v1 to avoid overwriting the original params for each sample
+  params_copy <- params_v1
+
+  # Loop through each species and adjust the k_vb, w_inf, and beta parameters by ±10%
+  for (i in 1:13) {
+    # Update k_vb for species i
+    params_copy@species_params$k_vb[i] <- params_v1@species_params$k_vb[i] * (1 + X[i, (i - 1) * 3 + 1])
+
+    # Update w_inf for species i
+    params_copy@species_params$w_inf[i] <- params_v1@species_params$w_inf[i] * (1 + X[i, (i - 1) * 3 + 2])
+
+    # Update beta for species i
+    params_copy@species_params$beta[i] <- params_v1@species_params$beta[i] * (1 + X[i, (i - 1) * 3 + 3])
+  }
+
+  # Run the simulation using project()
+  sim_results <- project(params_copy)
+
+  # Extract the last timestep results
+  last_timestep <- tail(dimnames(sim_results@n)$time, 1)
+
+  # Ensure the last timestep is numeric, if not, coerce it
+  last_timestep_numeric <- as.numeric(last_timestep)
+
+  # Sum biomass across all species and all size classes at the last timestep
+  total_community_biomass <- sum(sim_results@n[, , last_timestep_numeric])  # Sum across species and size classes
+  
+  return(total_community_biomass)  # Return the total community biomass for the current sample
+}
+
+
+
+
+
+param_sample <- function(N) {
+  # Initialize matrices to hold the sampled values for each parameter
+  k_vb <- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for k_vb
+  w_inf<- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for w_inf
+  beta <- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for beta
+
+  # Combine all parameters into a single matrix (39 columns for 13 species, 3 params each)
+  return(cbind(k_vb, w_inf, beta))
+}
+
+# Number of samples
+N <- 10
+
+# Generate two independent sample sets
+X1 <- param_sample(N)
+X2 <- param_sample(N)
+
+# Run Sobol analysis
+sobol_result <- sobolSalt(model = mizer_model, X1 = X1, X2 = X2, scheme = "A")
+
+# Evaluate the model with the Sobol sample points
+sobol_result <- tell(sobol_result, mizer_model(sobol_result$X))
+
+# Plot or inspect results (first-order and total-effect indices)
+plot(sobol_result, choice = 1, main = "First-Order Sobol Indices")  # First-order indices
+plot(sobol_result, choice = 2, main = "Total-Effect Sobol Indices")  # Total-effect indices
+
+
+```
+
+
+
 
 
