@@ -1,0 +1,160 @@
+---
+title: "sensitivity_test"
+output: html_document
+date: "2024-09-25"
+---
+
+
+```{r}
+# Install and load necessary packages
+
+library(sensitivity)
+ rm(list =ls()) # clear memory
+ 
+
+
+# Step 1: Define a simple dummy model
+dummy_model <- function(X) {
+  a <- X[, 1]
+  b <- X[, 2]
+  c <- X[, 3]
+  
+  # Example model: output = a * b + c^2
+  output <- a * b + c^2
+  return(output)
+}
+
+# Step 2: Define the parameter bounds for the Sobol analysis
+# Parameter ranges:
+# a ∈ [0.5, 2], b ∈ [1, 3], c ∈ [0, 1]
+
+# Create a function to sample the parameters using uniform distribution
+param_sample <- function(N) {
+  a <- runif(N, 0.5, 2)
+  b <- runif(N, 1, 3)
+  c <- runif(N, 0, 1)
+  return(cbind(a, b, c))
+}
+
+# Step 3: Generate Sobol sample points
+# Number of samples (N) – increase N for more robust results
+N <- 1000
+
+# Generate two independent sets of samples, X1 and X2
+X1 <- param_sample(N)
+X2 <- param_sample(N)
+
+# Step 4: Run the Sobol sensitivity analysis
+sobol_result <- sobolSalt(model = dummy_model, X1 = X1, X2 = X2, scheme = "A")
+
+# Step 5: Evaluate the model on the Sobol samples
+sobol_result <- tell(sobol_result, dummy_model(sobol_result$X))
+
+# Step 6: Analyze the Sobol sensitivity indices
+print(sobol_result$S)  # First-order sensitivity indices
+print(sobol_result$T)  # Total sensitivity indices
+
+# Plot the first-order Sobol indices (S)
+plot(sobol_result, choice = 1)
+
+
+```
+
+
+```{r}
+# Plot the total-effect Sobol indices (T)
+plot(sobol_result, choice = 2)
+```
+
+
+```{r}
+
+# Create a multi-panel plot for first-order and total-effect indices
+par(mfrow = c(1, 2))  # Set up a plot with 1 row and 2 columns
+plot(sobol_result, choice = 1)  # First-order indices
+plot(sobol_result, choice = 2)  # Total-effect indices
+
+```
+
+# add a bit more complexity - 3 species
+
+```{r}
+# Complex dummy model with multiple species using the same equation
+dummy_model <- function(X) {
+  # Species 1 parameters
+  a1 <- X[, 1]
+  b1 <- X[, 2]
+  c1 <- X[, 3]
+  
+  # Species 2 parameters
+  a2 <- X[, 4]
+  b2 <- X[, 5]
+  c2 <- X[, 6]
+  
+  # Species 3 parameters
+  a3 <- X[, 7]
+  b3 <- X[, 8]
+  c3 <- X[, 9]
+  
+  # Same equation for all species: output = (a * b) + c^2
+  output_species_1 <- a1 * b1 + c1^2
+  output_species_2 <- a2 * b2 + c2^2
+  output_species_3 <- a3 * b3 + c3^2
+  
+  # Combine the outputs for all species into a single output vector
+  output <- output_species_1 + output_species_2 + output_species_3
+  
+  return(output)
+}
+
+
+
+# Updated param_sample function to generate parameters for 3 species
+param_sample <- function(N) {
+  # Species 1 parameters
+  a1 <- runif(N, 0.5, 2)
+  b1 <- runif(N, 1, 3)
+  c1 <- runif(N, 0, 1)
+  
+  # Species 2 parameters
+  a2 <- runif(N, 0.5, 2)
+  b2 <- runif(N, 1, 3)
+  c2 <- runif(N, 0, 1)
+  
+  # Species 3 parameters
+  a3 <- runif(N, 0.5, 2)
+  b3 <- runif(N, 1, 3)
+  c3 <- runif(N, 0, 1)
+  
+  # Combine all parameters into one matrix
+  return(cbind(a1, b1, c1, a2, b2, c2, a3, b3, c3))
+}
+
+
+
+# Step 3: Generate Sobol sample points
+# Number of samples (N) – increase N for more robust results
+N <- 1000
+
+# Generate two independent sets of samples, X1 and X2
+X1 <- param_sample(N)
+X2 <- param_sample(N)
+
+# Step 4: Run the Sobol sensitivity analysis
+sobol_result <- sobolSalt(model = dummy_model, X1 = X1, X2 = X2, scheme = "A")
+
+# Step 5: Evaluate the model on the Sobol samples
+sobol_result <- tell(sobol_result, dummy_model(sobol_result$X))
+
+# Step 6: Analyze the Sobol sensitivity indices
+print(sobol_result$S)  # First-order sensitivity indices
+print(sobol_result$T)  # Total sensitivity indices
+
+# Plot the first-order Sobol indices (S)
+plot(sobol_result, choice = 1)
+# Plot the total-effect Sobol indices (T)
+plot(sobol_result, choice = 2)
+
+```
+
+
