@@ -1,0 +1,286 @@
+
+
+```{r}
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(reshape2)
+# remotes::install_github("gustavdelius/mizerShelf")
+library(mizerShelf)
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/therMizer")
+library(therMizer)
+#install.packages("sensobol")
+library(sensobol)
+library(sensitivity)
+library(dietr)
+
+ 
+ rm(list =ls()) # clear memory
+ 
+```
+
+
+```{r}
+SIA_TP <- read.csv("POM_meandata.csv")
+# Remove all '.' from the Species column in the SIA_TP dataframe
+SIA_TP$Species <- gsub("\\.", "", SIA_TP$Species)
+# Correct the species name in the trophic_positions_by_size dataframe
+SIA_TP$Species <- gsub("Nannobranchium achirus", "Nannobrachium achirus", SIA_TP$Species)
+
+
+params_v1 <- readRDS("tuned_params_v3.rds")
+
+plotDiet(params_v1)
+```
+
+
+
+# find trophic position by size
+```{r}
+# Function to calculate trophic position by size and species
+calc_trophic_position_by_size <- function(params, resourceTL = 1.0) {
+  # Get diet composition from params object
+  dietcomp <- getDiet(params)
+  
+  # Get species names
+  species <- dimnames(dietcomp)$predator
+  
+   # Set up trophic levels for each prey species (and the basal resource) - from SIA data
+  prey_tl <- c(
+    "Euphausia similis" = 2.7,  # Example: small zooplankton
+    "Thysannoessa macura" = 2.7,
+    "Sergestes spp" = 2.8,    # Example: medium zooplankton
+    "Themisto spp" = 2.1,
+    "Lampanyctus australis" = 3.2,  # Example: small fish
+    "Nannobrachium achirus" = 3.2,
+    "Cyclothone spp" = 3.4,
+    "Bathylagus spp" = 3.3,  # Example: large fish
+    "Cranchidae" = 2.7,
+    "Chaetognath" = 2.7,       # Example: top predator
+    "Gymnosomata" = 3.1,
+    "Pyrosoma atlanticum" = 2.0,  # Treat this as basal resource or filter-feeder
+    "Atolla wyvillei" = 3.0,  # Example: jellyfish top predator
+    "Resource" = resourceTL
+  )
+  
+  
+  # Initialize a list to store trophic positions by size for each species
+  trophic_positions_by_size <- list()
+  
+  # Calculate trophic level for each predator species and size class
+  for (pred in species) {
+    # Get the diet composition for this predator across all size classes and prey
+    spec_diet <- dietcomp[pred, , , drop = FALSE]
+    
+    # Calculate trophic level for each size class
+    tl_per_size <- apply(spec_diet, 2, function(diet) {
+      weighted_tl <- sum(diet * prey_tl) / sum(diet)  # Weighted mean of prey TL
+      return(1 + weighted_tl)  # Add 1 to represent predator being one level above prey
+    })
+    
+    # Store the trophic levels for this species by size class
+    trophic_positions_by_size[[pred]] <- tl_per_size
+  }
+  
+  # Convert list to data frame for easier manipulation
+  trophic_df <- do.call(rbind, lapply(names(trophic_positions_by_size), function(spec) {
+    data.frame(
+      Species = spec,
+      Size = dimnames(dietcomp)$w,  # Assuming 'w' represents the size classes
+      TrophicPosition = trophic_positions_by_size[[spec]]
+    )
+  }))
+  
+  return(trophic_df)
+}
+
+# Step 2: Apply the function to your params object
+trophic_positions_by_size <- calc_trophic_position_by_size(params_v1)
+
+# Step 3: View the trophic positions by size and species
+print(trophic_positions_by_size)
+
+
+
+
+
+
+```
+
+```{r}
+
+# Manually set the order of the species
+species_order <- c(
+  "Pyrosoma atlanticum", "Themisto spp", "Euphausia similis", "Thysannoessa macura", "Chaetognath",
+  "Cranchidae", "Sergestes spp", "Atolla wyvillei", 
+  "Nannobrachium achirus", "Lampanyctus australis", "Bathylagus spp", "Cyclothone spp", "Gymnosomata"
+)
+
+# Reorder the Species factor based on the specified order
+trophic_positions_by_size$Species <- factor(trophic_positions_by_size$Species, levels = species_order)
+
+# Create the boxplot with specified y-axis limits and ordered species
+modeledTP_p <- ggplot(trophic_positions_by_size, aes(x = Species, y = TrophicPosition)) +
+  geom_boxplot() + # Adds the boxplot
+  labs(x = "Species", y = "Trophic Position", title = "Boxplot of Trophic Position by Species") +
+  theme_minimal() + # Apply a minimal theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # Rotate x-axis labels
+  ylim(1, 4) # Set y-axis limits to 0-4
+
+
+ggsave("modeledTP_p.png", plot = modeledTP_p)
+
+modeledTP_p
+
+```
+
+
+
+```{r}
+
+# Step 1: Filter out size classes with near-zero trophic positions
+trophic_positions_filtered <- trophic_positions_by_size[trophic_positions_by_size$TrophicPosition > 0, ]
+
+# Step 2: Plot trophic position by size for each species with facet wrap and species-specific x-axis
+modeledTP_size <- ggplot(trophic_positions_filtered, aes(x = as.numeric(Size), y = TrophicPosition)) +
+  geom_line() +  # Plot lines to show the change in trophic position by size
+  theme_minimal() +  # Minimal theme for a clean look
+  labs(title = "Trophic Position by Size for Each Species", 
+       x = "Size Class", 
+       y = "Trophic Position") +
+  facet_wrap(~ Species, scales = "free_x") +  # Create facet wrap for each species with free x-axis
+  ylim(1, NA) +
+  theme(legend.position = "none")  # Remove legend as each facet represents a species
+
+ggsave("modeledTP_size_p.png", plot = modeledTP_size)
+
+modeledTP_size
+```
+#SIA v. model outputs
+
+```{r}
+
+# Prepare the stable isotope data
+SIA_TP_clean <- SIA_TP %>%
+  rename(TrophicPosition = TP) %>% # Make column names consistent
+  select(Species, TrophicPosition) # Select relevant columns
+
+# Add a column to distinguish the data sources
+trophic_positions_by_size$DataSource <- "Modeled"
+SIA_TP_clean$DataSource <- "Stable Isotope"
+
+
+# Combine the two datasets
+combined_TP <- bind_rows(trophic_positions_by_size, SIA_TP_clean)
+
+# Manually set the order of the species
+species_order <- c(
+  "Pyrosoma atlanticum", "Euphausia similis", "Thysannoessa macura",  "Themisto spp", "Sergestes spp", "Chaetognath",
+  "Cranchidae","Gymnosomata", "Atolla wyvillei", 
+  "Nannobrachium achirus", "Lampanyctus australis", "Bathylagus spp", "Cyclothone spp"
+)
+
+# Reorder the Species factor based on the specified order
+combined_TP$Species <- factor(combined_TP$Species, levels = species_order)
+
+# Create the combined boxplot
+combined_plot <- ggplot(combined_TP, aes(x = Species, y = TrophicPosition, fill = DataSource)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) + # Dodge to separate boxes
+  labs(x = "Species", y = "Trophic Position", title = "Comparison of Trophic Position by Species") +
+  theme_minimal() + # Apply a minimal theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # Rotate x-axis labels
+  ylim(1, 4) + # Set y-axis limits to 1-4
+  scale_fill_manual(values = c("Modeled" = "skyblue", "Stable Isotope" = "orange")) # Optional: Set custom colors
+
+# Display the plot
+print(combined_plot)
+
+ggsave("modeled_v_SIA.png", plot = combined_plot)
+
+combined_plot
+
+```
+#other data vis:
+
+```{r}
+ggplot(combined_TP, aes(x = TrophicPosition, fill = DataSource)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ Species) +
+  labs(x = "Trophic Position", title = "Density Plot of Trophic Position by Species") +
+  theme_minimal()
+
+
+
+
+
+```
+
+
+```{r}
+# Make sure the Size column is numeric
+trophic_positions_by_size$Size <- as.numeric(trophic_positions_by_size$Size)
+
+
+```
+```{r}
+trophic_positions_by_size <- trophic_positions_by_size %>% 
+  filter(Species != "Pyrosoma atlanticum" & Species != "Euphausia similis" & Species != "Thysannoessa macura") # removed for now 23/10.....
+
+# Fit a linear model
+model_w <- lm(TrophicPosition ~ Size, data = trophic_positions_by_size )
+
+# Extract the R-squared value
+r_squared <- summary(model_w)$r.squared
+
+# Create the scatterplot with a line of best fit and display the R-squared value
+ggplot(trophic_positions_by_size, aes(x = Size, y = TrophicPosition)) +
+  geom_point(alpha = 0.6) +  # Scatterplot points with some transparency
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +  # Line of best fit with confidence interval
+  labs(x = "Size (g)", y = "Trophic Position (TP)", 
+       title = "Scatterplot of Trophic Position vs. Size with Line of Best Fit") +
+  annotate("text", x = Inf, y = Inf, label = paste("R² =", round(r_squared, 3)), 
+           hjust = 1.1, vjust = 1.5, size = 5, color = "black") +  # Add R-squared annotation
+  xlim(0, 10) +  # Set the x-axis limit to 0 - 10 g
+  theme_minimal()
+```
+
+
+#stats
+
+
+```{r}
+# Two-sample t-test (Welch's t-test)
+t_test_results <- t.test(TrophicPosition ~ DataSource, data = combined_TP)
+print(t_test_results)
+
+```
+
+
+```{r}
+# Mann-Whitney U test
+wilcox_test_results <- wilcox.test(TrophicPosition ~ DataSource, data = combined_TP)
+print(wilcox_test_results)
+
+```
+
+```{r}
+# Two-way ANOVA
+anova_results <- aov(TrophicPosition ~ Species * DataSource, data = combined_TP)
+summary(anova_results)
+
+```
+
+```{r}
+# Linear mixed-effects model
+library(lme4)
+model <- lmer(TrophicPosition ~ DataSource + (1 | Species), data = combined_TP)
+summary(model)
+
+```
+The model shows that there is a significant difference in trophic position between the modeled and stable isotope-derived data, with stable isotope values generally being higher. The random effects account for species-specific variability, showing that while species influence trophic positions, the difference between data sources remains a strong effect.
+
+

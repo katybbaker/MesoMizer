@@ -1,0 +1,461 @@
+
+
+#code by Jon Reum
+
+
+```{r}
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(reshape2)
+# remotes::install_github("gustavdelius/mizerShelf")
+library(mizerShelf)
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/therMizer")
+library(therMizer)
+#install.packages("sensobol")
+library(sensobol)
+library(sensitivity)
+library(dietr)
+
+ 
+ rm(list =ls()) # clear memory
+ 
+```
+
+
+
+```{r}
+# 
+# 
+# #Function to process all the scenarios in a batch 
+# 
+# runSims<-function(scenList= scen_list, 
+#                   params=params_v1, 
+#                   effort=effort, 
+#                   calibrateSetup=FALSE, 
+#                   initial_n=initial_n, 
+#                   initial_n_pp = initial_n_pp, 
+#                   diet_steps=10,
+#                   dt=1,
+#                   getDiet4D=TRUE){
+#   
+#   resultList<- scenList
+#   
+#   params_scen<- params_v1
+#   
+#   for(i in 1:length(scenList)){
+#     
+#     params_scen@species_params$ca_met<- scenList[[i]]["ca_met"]
+#     params_scen@species_params$ca_mat<- scenList[[i]]["ca_mat"]
+#     params_scen@species_params$ca_mor<- 0
+#     params_scen@species_params$ca_int<- 0
+#     
+#     params_scen@species_params$ea_met<- scenList[[i]]["ea_met"]
+#     params_scen@species_params$ea_mat<- 0
+#     params_scen@species_params$ea_mor<- scenList[[i]]["ea_mor"]
+#     params_scen@species_params$ea_int<- scenList[[i]]["ea_int"]
+#     
+#     m_scen<-projectSetup(params_scen, effort=modscaled.INT_round2_fit@effort, 
+#                          dt=dt, 
+#                          calibrateSetup=FALSE, 
+#                          initial_n = initial_n, 
+#                          initial_n_pp = initial_n_pp, 
+#                          temperature_dt=scenList[[i]]["temperature"],
+#                          temperatureRef_dt=scenList[[i]]["temperatureRef"], 
+#                          diet_steps=diet_steps,
+#                          getDiet4D=getDiet4D)
+#     
+#     resultList[[i]]<-m_scen
+#     print(i)
+#   }
+#   return(resultList)
+# }
+# 
+# 
+# 
+# # Once the scenarios are run and stored as a list, we can use the below functions 
+# # with lapply to grab our favorite summary statistic or value from each model scenario 
+# # Note, the TL functions aren't correct just yet - working on that today (1/31/2020)
+# 
+
+#############################################
+#           MODELS as a list 
+#############################################
+
+
+
+#############################
+# get community indicators 
+#############################
+
+
+
+#getCommInd<-function(modls){
+  
+  #Indicators, apply to fish greater than 10 g
+  # (1) LFI<- Large fish indicator: Biomass fish > 40 cm / Total biomass of all fish  (Blanchard et al. 2014) 
+  # (2) MIW<- Mean individual weight 
+  # (3) MMW<- Mean maximum weight (See Blanchard et al. 2014) 
+  # (4) Slope<- Slope of community size spectrum 
+  # 
+  # modN<-length(modls)
+  # modnam<- names(modls)
+  # 
+  # 
+  # species<-unique(modls[[1]]@params@species_params$species1)
+  # species<- species[-which(species=="Benthos")]
+  # species<- species[-which(species=="Detritus")]
+  # 
+  # #Data frames to hold indivudal variables, array to hold output from all models 
+  # 
+  # years<- as.numeric(as.character(dimnames(modls[[1]]@n)$time))
+  # predLFI<-expand.grid(list(year=years))
+  # 
+  # predLFI$sim<-0
+  # 
+  # predMIW<- predLFI
+  # predMMW<- predLFI
+  # predSlope<- predLFI
+  # 
+  # 
+  # predLFI$ts<-"lfi"
+  # predMIW$ts<- "miw"
+  # predMMW$ts<- "mmw"
+  # predSlope$ts<- "slope"
+  # 
+  # #Data frame to hold time series output 
+  # datnew<- data.frame(year=0, sim=0, ts=0, model=0)
+  # datnew<-datnew[0,]
+  # 
+  
+  
+  #Extract LFI, MIW, MMW, and slope from previously fitted models   
+#   
+#   for( i in 1:modN){
+#     mod_preds<- modls[[i]]
+#     
+#     #Predict from model 
+#     
+#     time<- mod_preds@t_dimnames
+#     
+#     for (j in 1:length(time)){
+#       
+#       abspec<-getSpectra(mod_preds, time_range=time[j], biomass=FALSE) #Abundance spectra 
+#       abspec<- abspec[(abspec$w>=10), ]
+#       
+#       #Mean Individual weight 
+#       absFC<-subset(abspec, Species=="Fish_Crabs")
+#       
+#       predMIW$sim[j]<- weighted.mean(absFC$w,absFC$value )
+#       
+#       #Slope 
+#       abspectot<- aggregate(value~w, FUN=sum, data=abspec)
+#       predSlope$sim[j]<- coef(lm(log10(abspectot$value / mod_preds@params@dw_full[ mod_preds@params@w_full>10]) ~ log10(abspectot$w)))[2]
+#       
+#       
+#       #Mean maximum weight (treat sex as separate species)
+#       biospec<-getSpectra(mod_preds, time_range=time[j], biomass=TRUE) #Abundance spectra 
+#       biospec<- biospec[(biospec$w>=10), ]
+#       biospec<- biospec[!(biospec$Species=="Benthos"), ]
+#       biospec<- biospec[!(biospec$Species=="Background"), ]
+#       biospec<- biospec[!(biospec$Species=="Fish_Crabs"), ]
+#       
+#       
+#       ma<-match( biospec$Species, mod_preds@params@species_params$species)
+#       biospec$wmax<- mod_preds@params@species_params$w_inf[ma]
+#       biosum<-aggregate(value~wmax,data=biospec,FUN=sum)
+#       
+#       predMMW$sim[j]<- weighted.mean( biosum$wmax, biosum$value)
+#       
+#       #Large Fish indicator (crabs are excluded)
+#       
+#       biospec<- biospec[!(biospec$Species=="TANNER_m"), ]
+#       biospec<- biospec[!(biospec$Species=="TANNER_f"), ]
+#       biospec<- biospec[!(biospec$Species=="SNOWCRAB_m"), ]
+#       biospec<- biospec[!(biospec$Species=="SNOWCRAB_f"), ]
+#       biospec<- biospec[!(biospec$Species=="RKC_m"), ]
+#       biospec<- biospec[!(biospec$Species=="RKC_f"), ]
+#       
+#       ma<-match( biospec$Species, mod_preds@params@species_params$species)
+#       
+#       a<-mod_preds@params@species_params$a
+#       b<-mod_preds@params@species_params$b
+#       biospec$length<- exp( log(biospec$w/a[ma])/b[ma])
+#       
+#       predLFI$sim[j]<- sum(biospec$value[biospec$length>40])/ sum(biospec$value)
+#       
+#     }
+#     
+#     predLFI$model<-names(modls)[i]
+#     predMMW$model<-names(modls)[i]
+#     predMIW$model<-names(modls)[i]
+#     predSlope$model<-names(modls)[i]
+#     
+#     datnew<-rbind(datnew,predLFI, predMMW, predMIW, predSlope)
+#     
+#   } 
+#   return(datnew)
+# }
+
+
+
+
+
+
+
+##########################################
+#
+# Get trophic level for each predator  
+#
+########################################
+
+
+#modls<- allmodsF_350yrs
+#        time_range=c(2339, 2364)
+#        pelTLslope=.1
+#        pelTLint=2.5
+#        benTLslope=0
+#        benTLint=2.5
+
+#test
+#modls<-modList
+#mod<- modList[[1]]
+
+params_v1 <- readRDS("tuned_params_v3.rds")
+dietcomp <- getDiet(params)
+
+getTLbyPred<-function(mod, 
+                      time_range=max(as.numeric(dimnames(mod@n)$time)), 
+                      zoopTL=0, #TL of background resource - POM
+                      pelTLslope=0, pelTLint=0,
+                      benTLslope=0, benTLint=0){ 
+  
+  
+  
+  time_elements <- get_time_elements(mod,time_range)
+  
+  n <- apply(mod@n[time_elements,,,drop=FALSE],c(2,3), mean)   # get n for weighting community mean TL 
+  
+  #Get biomass density     
+  
+  size_range <- get_size_range_array(mod@params)
+  
+  n_dw <- sweep(n*size_range,2,mod@params@dw, "*")
+  b_wdw <- sweep(n_dw,2,mod@params@w, "*")
+  
+  
+  n1<-n_dw
+  n1[n1>0]<-1
+  
+  
+  #Pull out diet composition 
+  dietcomp<-mod@diet_comp4D #getDiet
+  
+  tlsum<-dietcomp[1,1,,]
+  tlsum<-drop(tlsum)
+  names(dimnames(tlsum))<-c("predator","pred_size")
+  
+  predator<- dimnames(dietcomp)$predator
+  prey<-dimnames(dietcomp)$prey
+  pred_size<- dimnames(dietcomp)$pred_size
+  prey_size<- dimnames(dietcomp)$prey_size
+  
+  tlsum[]<-0
+  tlsum[dimnames(tlsum)$predator=="Benthos", ]<- benTLint + benTLslope * log10(as.numeric(dimnames(tlsum)$pred_size))
+  tlsum[dimnames(tlsum)$predator=="background", ]<- pelTLint + pelTLslope * log10(as.numeric(dimnames(tlsum)$pred_size))
+  
+  #Load in specific zoop TL if supplied 
+  if(all(!is.na(zoopTL))){ tlsum[dimnames(tlsum)$predator=="background", ] <- zoopTL }
+  
+  
+  predator<- predator[!predator=="Detritus"]
+  predator<- predator[!predator=="Benthos"]
+  predator<- predator[!predator=="background"]
+  
+  #Calculate the weighted mean community TL 
+  
+  tlcomm<- rep(NA,length(prey_size))
+  
+  dimnames(n)[[2]]<-  dimnames(dietcomp)$pred_size
+  for(i in 1:length(pred_size)){      #Predator size 
+    for (j in 1:length(predator)){  #Predator species
+      
+      tl<- 1 + weighted.mean(tlsum,  dietcomp[dimnames(dietcomp)$predator==predator[j], dimnames(dietcomp)$pred_size==pred_size[i], ,] ) 
+      tlsum[dimnames(tlsum)$predator==predator[j], dimnames(tlsum)$pred_size==pred_size[i]]<-tl
+      
+      #Remove tl where predator abundance is zero 
+      
+    }
+    
+    #Get community weighted mean tl:  sum(tl * n) /sum(n) 
+    if(sum(n_dw[dimnames(n)$sp %in%predator, i]) == 0){
+      tlcomm[dimnames(tlsum)$pred_size==pred_size[i]]<- NA
+    } else {   
+      tlcomm[dimnames(tlsum)$pred_size==pred_size[i]]<- sum((tlsum[ dimnames(tlsum)$predator  %in% predator, dimnames(tlsum)$pred_size==pred_size[i]] * n_dw[dimnames(n)$sp %in%predator, i] )) / sum(n_dw[dimnames(n)$sp %in%predator, i])
+    } #End if                 
+  } #End loop 
+  
+  
+  
+  #Remove tl of species if predator abundance is zero 
+  for(i in 1:length(pred_size)){      #Predator size 
+    for (j in 1:length(predator)){  #Predator species
+      
+      
+      if( as.numeric(pred_size[i]) > as.numeric(min(dimnames(n)$w))  ){
+        if(n[dimnames(n)$sp==predator[j], dimnames(n)$w==pred_size[i]]==0) {
+          tlsum[dimnames(tlsum)$predator==predator[j], dimnames(tlsum)$pred_size==pred_size[i]]<- NA
+        }
+      }
+    }
+  }
+  
+  
+  
+  #Add community on to species matrix 
+  tlcomm<- matrix(tlcomm, nrow=1)
+  rownames(tlcomm)<- "community"
+  tlsum<-rbind(tlsum, tlcomm)
+  
+  dimnames(tlsum)<-list( predator=dimnames(tlsum)[[1]], 
+                         pred_size=dimnames(tlsum)[[2]])
+  
+  #Get rid of Benthos, Detritus, background
+  tlsum<-tlsum[ !dimnames(tlsum)$predator %in% c("Benthos","Detritus","background"), ]
+  
+  
+  #Melt the arrays to make data frame with species, wt, biomass, num, tl 
+  tldat<-melt(tlsum)
+  colnames(tldat)<- c("predator", "wt","tl")
+  
+  
+  
+  return(tldat)
+  
+} #end function 
+
+
+
+
+
+################################################
+#
+# Get TL by body size for individual species 
+#
+##################################################
+
+getSpTLBodySize<-function(modls, 
+                          time_range=max(as.numeric(dimnames(modls[[1]]@n)$time)),
+                          zoopTL=NA,
+                          pelTLslope=.1, pelTLint=2.5,
+                          benTLslope=0, benTLint=2.5){ 
+  
+  #data frame to recieve results 
+  dat<-data.frame(wt=0, tls=0, model=0, species=0)
+  dat<-dat[-1,]
+  
+  
+  
+  for (h in 1:length(modls)){
+    
+    time_elements <- get_time_elements(modls[[h]],time_range)
+    
+    n <- apply(modls[[h]]@n[time_elements,,,drop=FALSE],c(2,3), mean)   # get n for getting weighted community mean TL 
+    
+    #Get biomass density     
+    
+    size_range <- get_size_range_array(modls[[h]]@params)
+    
+    b <- sweep(n*size_range,2,modls[[h]]@params@w * modls[[h]]@params@dw, "*")
+    n <- sweep(n*size_range,2,modls[[h]]@params@dw, "*")
+    
+    n1<-n
+    n1[n1>0]<-1
+    
+    #Pull out diet composition 
+    dietcomp<-modls[[h]]@diet_comp4D
+    
+    tlsum<-dietcomp[1,1,,]
+    tlsum<-drop(tlsum)
+    names(dimnames(tlsum))<-c("predator","pred_size")
+    
+    predator<- dimnames(dietcomp)$predator
+    prey<-dimnames(dietcomp)$prey
+    pred_size<- dimnames(dietcomp)$pred_size
+    prey_size<- dimnames(dietcomp)$prey_size
+    
+    tlsum[]<-0
+    tlsum[dimnames(tlsum)$predator=="Benthos", ]<- benTLint + benTLslope * # take out benthic  log10(as.numeric(dimnames(tlsum)$pred_size))
+    tlsum[dimnames(tlsum)$predator=="background", ]<- pelTLint + pelTLslope * log10(as.numeric(dimnames(tlsum)$pred_size))
+    
+    #Load in specific zoop TL if supplied 
+    if(all(!is.na(zoopTL))){ tlsum[dimnames(tlsum)$predator=="background", ] <- zoopTL }
+    
+    predator<- predator[!predator=="Detritus"]
+    predator<- predator[!predator=="Benthos"]
+    predator<- predator[!predator=="background"]
+    
+    
+    
+    for(i in 1:length(pred_size)){    #Predator size 
+      for (j in 1:length(predator)){ #Predator species
+        
+        tl<- 1 + weighted.mean(tlsum,  dietcomp[dimnames(dietcomp)$predator==predator[j], dimnames(dietcomp)$pred_size==pred_size[i], ,] ) 
+        tlsum[dimnames(tlsum)$predator==predator[j], dimnames(tlsum)$pred_size==pred_size[i]]<-tl
+      }
+    }
+    
+    
+    tlsumSub<-tlsum[1:25, 31:130]
+    
+    tlsumSub[n1==0]<- 0 
+    
+    out<-melt(tlsumSub)
+    out$value[out$value==0]<-NA
+    
+    colnames(out$value)
+    colnames(out)[which(colnames(out)=="value")]<- "tls"
+    colnames(out)[which(colnames(out)=="predator")]<- "species"
+    colnames(out)[which(colnames(out)=="pred_size")]<- "wt"
+    
+    out$model<- names(modls)[h]
+    
+    dat<-rbind(dat, out)
+  } #end h 
+  
+  return(dat)
+  
+} #end function 
+
+
+
+
+
+##################Function to get TLsmooth 
+
+TLsmooth<-function(biomass, bins, tlsd=.1, binwid=.05){
+  biosum<- rep(0,length(biomass))
+  
+  for(i in 1:length(biomass)){  # Pull out biomass in bin to distribute
+    bio<-biomass[i]
+    
+    if(bio>0){
+      for(j in 1:length(biomass)){ # distribute biomass from bin to surrounding bins
+        biosum[j]<- biosum[j] + dnorm(bins[j],bins[i],tlsd)* bio * binwid
+      }
+    }
+  }
+  return(biosum)
+}
+
+
+
+
+
+
+```
+
