@@ -1,0 +1,359 @@
+---
+title: "01_SIA_trophic position"
+output: html_document
+date: "2024-10-21"
+---
+
+
+
+```{r}
+
+library(ggplot2)
+library(reshape2)
+library(plyr)
+library(dplyr)
+library(tidyr)
+
+rm(list = ls())
+
+```
+
+
+```{r}
+
+#Load your data
+data<-read.csv("C:/Users/kbaker5/OneDrive - University of Tasmania/Desktop/PhD_Salamanca/RstudioProjects/05_SIA/rcode/input/2024_SIA_CN_master.csv")
+POM <- read.csv("C:/Users/kbaker5/OneDrive - University of Tasmania/Desktop/PhD_Salamanca/RstudioProjects/05_SIA/rcode/input/Final_SOLACE_CN_Report_POM.csv")
+
+
+#View the first 10 rows of data
+head(data) 
+
+
+```
+
+#data wrangling - take mean of subsamples
+
+```{r}
+data <- data %>%
+  mutate(sample = ifelse(grepl("_", Sample.ID), 
+                         gsub("_[a-zA-Z]$", "", Sample.ID), 
+                         Sample.ID)) %>% 
+    mutate(
+    Length..mm. = as.numeric(Length..mm.),
+    WW..g. = as.numeric(WW..g.),
+    DW..g. = as.numeric(DW..g.),
+    d15N = as.numeric(d15N),
+    d13C = as.numeric(d13C),
+    C.N = as.numeric(C.N)
+  )
+
+mean_data <- data %>%
+  group_by(Group, Site, Depth, Species, Tissue, sample, Lipid) %>%
+  summarise_at(vars(Weight..mg.:C.N), mean, na.rm = TRUE) %>% 
+  filter(sample!= "SSP_04")
+```
+
+
+```{r}
+
+
+# POM <- POM %>%
+#   select(ISP.., Pump, Depth, d13C, d15N, Site) %>% 
+#   filter(Site == "SOTS") %>% 
+#   group_by(ISP.., Pump, Depth) %>% 
+#   summarize(d13C_av = mean(d13C, na.rm = TRUE),
+#             d15N_av = mean(d15N, na.rm = TRUE)) %>% 
+#   ungroup() %>% 
+#  # Assign Depth_stratum based on the Depth
+#   mutate(Depth_stratum = case_when(
+#     Depth < 300 ~ "Epi",
+#     Depth >= 300 & Depth < 500 ~ "Meso",
+#     Depth >= 500 ~ "Lmeso"
+#   )) %>% 
+#   group_by(Depth_stratum) %>% 
+#    summarize(d13C_av = mean(d13C_av, na.rm = TRUE), 
+#             d15N_av = mean(d15N_av, na.rm = TRUE)) %>% 
+#    select(Depth_stratum, d13C_av, d15N_av) %>%
+#   unique()
+#             
+# 
+# POM <- POM %>% 
+#   mutate(Species = "POM",
+#          Group = "POM",
+#          Lipid = "y",
+#          Tissue = "NA",
+#          Site = "SOTS") %>%
+#   rename(Depth = Depth_stratum, d13C = d13C_av, d15N = d15N_av)
+
+mean_data_con <- mean_data %>%
+  ungroup() %>%
+  select(Site, Species,Group,Length..mm., WW..g., Depth, Lipid, Tissue, d13C, d15N)
+
+POM_meandata <-mean_data_con 
+
+
+POM_meandata <- POM_meandata %>% 
+  filter(Site == "SOTS") #no chaetogntha from SOTS....
+
+
+```
+
+```{r}
+endmembers.sum <- ddply(POM_meandata, c("Species"), summarise,
+                        d13Cmn = mean(d13C, na.rm = TRUE),
+                        d13Csd = sd(d13C, na.rm = TRUE),
+                        d15Nmn = mean(d15N, na.rm = TRUE),
+                        d15Nsd = sd(d15N, na.rm = TRUE))
+
+Tunicate_endmember<-subset(endmembers.sum, Species == "Pyrosoma atlanticum")
+#POM_endmember<-subset(endmembers.sum, Species == "POM")
+
+d15N_tun <- Tunicate_endmember$d15Nmn
+#d15N_POM <- POM_endmember$d15Nmn
+
+```
+
+
+```{r}
+dN_lengthplot <-ggplot(mean_data, aes(x = Length..mm., y = d15N, colour = Group, shape = Depth)) +
+  geom_point(alpha = 0.7, size=2) +
+  scale_x_log10()+
+  facet_wrap(~Group)+
+  theme_bw()
+
+dN_lengthplot
+ggsave("dN_lengthplot.pdf")
+```
+
+# finding trophic position - pyrosome endmember
+
+```{r}
+POM_meandata$TP <- 2 + (POM_meandata$d15N - d15N_tun) / 3.4
+head(POM_meandata)
+
+TP_av <- POM_meandata %>% 
+  group_by(Species) %>% 
+  mutate(av_TP = mean(TP)) %>% 
+  ungroup() %>% 
+  select(Species, av_TP) %>% 
+  unique()
+
+TP.boxplot <- ggplot(POM_meandata, aes(x = reorder(Species, TP, FUN = median), group = Species, y = TP, colour = Group)) +
+  geom_boxplot(outlier.shape = NA) +  # Remove outliers from the plot
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # Rotate labels to vertical
+  labs(x = "Species", y = "Trophic Position")  # Change x and y axis titles
+
+write.csv(POM_meandata, "POM_meandata.csv")
+
+TP.boxplot
+ggsave("TP.boxplot.png")
+```
+
+
+# finding trophic position - POM endmember
+
+```{r}
+# POM_meandata$TP <- 2 + (POM_meandata$d15N - d15N_POM) / 3.4
+# head(POM_meandata)
+# 
+# TP_av <- POM_meandata %>% 
+#   group_by(Species) %>% 
+#   mutate(av_TP = mean(TP)) %>% 
+#   ungroup() %>% 
+#   select(Species, av_TP) %>% 
+#   unique()
+# 
+# TP.boxplot <- ggplot(POM_meandata, aes(x = reorder(Species, TP, FUN = median), group = Species, y = TP, colour = Group)) +
+#   geom_boxplot(outlier.shape = NA) +  # Remove outliers from the plot
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # Rotate labels to vertical
+#   labs(x = "Species", y = "Trophic Position")  # Change x and y axis titles
+# 
+# write.csv(POM_meandata, "POM_meandata.csv")
+# 
+# TP.boxplot
+# ggsave("TP.boxplot.png")
+
+```
+
+
+```{r}
+
+ggplot(POM_meandata, aes(x = Length..mm., y = TP)) +
+  geom_point() + # Adds points for each data entry
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + # Optionally add a linear regression line
+  facet_wrap(~ Species, scales = "free_x") + # Free x-axis scales
+  labs(x = "Length (mm)", y = "Trophic Position (TP)", title = "Trophic Position vs Length per Species") +
+  theme_minimal() # Apply a minimal theme
+
+
+```
+
+#TP by length
+
+```{r}
+
+length_data <- POM_meandata %>% 
+  filter(Length..mm. != "NA") 
+
+# Assuming your data frame is named length_data and the length column is Length..mm.
+
+# Create 10 equal-size bins based on the range of Length..mm.
+breaks <- seq(min(length_data$Length..mm., na.rm = TRUE), 
+              max(length_data$Length..mm., na.rm = TRUE), 
+              length.out = 11)
+
+# Cut the Length..mm. data into these bins
+length_data$Size_Class <- cut(length_data$Length..mm., 
+                              breaks = breaks, 
+                              include.lowest = TRUE, 
+                              right = TRUE)
+
+# Extract the upper limits of each bin for labeling (excluding the last break)
+bin_labels <- breaks[-1]
+
+# Relabel the Size_Class factor with the corresponding upper limit for each bin
+levels(length_data$Size_Class) <- bin_labels
+
+# View the updated data frame
+head(length_data)
+
+
+
+```
+
+```{r}
+length_data <- length_data %>% 
+  filter(Species != "Pyrosoma atlanticum")
+
+# Create a boxplot of TP per Size_Class
+ggplot(length_data, aes(x = factor(Size_Class), y = TP)) +
+  geom_boxplot() +
+  labs(x = "Size Bin (Max Length)", y = "Trophic Position (TP)", title = "Trophic Position per Size Bin") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+
+
+# 
+# # Create a scatterplot with a line of best fit
+# ggplot(length_data, aes(x = Length..mm., y = TP)) +
+#   geom_point(alpha = 0.6) +  # Scatterplot points with some transparency
+#   geom_smooth(method = "lm", color = "blue", se = TRUE) +  # Line of best fit with confidence interval
+#   labs(x = "Size (mm)", y = "Trophic Position (TP)", 
+#        title = "Scatterplot of Trophic Position vs. Size with Line of Best Fit") +
+#   theme_minimal()
+# 
+
+
+
+# Fit a linear model
+model <- lm(TP ~ Length..mm., data = length_data)
+
+# Extract the R-squared value
+r_squared <- summary(model)$r.squared
+
+# Create the scatterplot with a line of best fit and display the R-squared value
+ggplot(length_data, aes(x = Length..mm., y = TP)) +
+  geom_point(alpha = 0.6) +  # Scatterplot points with some transparency
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +  # Line of best fit with confidence interval
+  labs(x = "Size (mm)", y = "Trophic Position (TP)", 
+       title = "Scatterplot of Trophic Position vs. Size with Line of Best Fit") +
+  annotate("text", x = Inf, y = Inf, label = paste("R² =", round(r_squared, 3)), 
+           hjust = 1.1, vjust = 1.5, size = 5, color = "black") +  # Add R-squared annotation
+  theme_minimal()
+
+
+
+```
+
+#TP with WW - convert length to ww for every species---- need to do this
+
+```{r}
+WW_g <- POM_meandata %>% 
+  filter(WW..g. != "NaN") %>% 
+  filter(Species != "Pyrosoma atlanticum")
+
+
+# Fit a linear model
+model_ww <- lm(TP ~ WW..g., data = WW_g )
+
+# Extract the R-squared value
+r_squared <- summary(model_ww)$r.squared
+
+# Create the scatterplot with a line of best fit and display the R-squared value
+ggplot(WW_g, aes(x = WW..g., y = TP)) +
+  geom_point(alpha = 0.6) +  # Scatterplot points with some transparency
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +  # Line of best fit with confidence interval
+  labs(x = "Size (g)", y = "Trophic Position (TP)", 
+       title = "Scatterplot of Trophic Position vs. Size with Line of Best Fit") +
+  annotate("text", x = Inf, y = Inf, label = paste("R² =", round(r_squared, 3)), 
+           hjust = 1.1, vjust = 1.5, size = 5, color = "black") +  # Add R-squared annotation
+  theme_minimal()
+
+```
+#Length to ww conversion
+```{r}
+
+
+# Step 1: Filter out rows where weight (WW) is NA
+subsample_data <- data %>% filter(!is.na(WW..g.))
+
+# Step 2: Fit the length-weight relationship for each species
+# We'll use the power model: WW = a * Length^b
+# Log-transform both Length and WW for linear regression
+
+length_weight_models <- subsample_data %>%
+  group_by(Group) %>%
+  do(model = lm(log(WW..g.) ~ log(Length..mm.), data = .))
+
+# Step 3: Extract the coefficients (a and b) from each model
+coef_data <- length_weight_models %>%
+  summarise(Group = unique(Group),
+            a = exp(coef(model)[1]),  # Intercept (converted back from log scale)
+            b = coef(model)[2])       # Slope
+
+# Step 4: Predict missing weights based on the fitted parameters
+POM_meandata <- POM_meandata %>%
+  left_join(coef_data, by = "Group") %>%
+  mutate(predicted_WW = ifelse(is.na(WW..g.), a * (Length..mm.^b), WW..g.))
+
+# The predicted_WW column now contains the original weights where available,
+# and the estimated weights where they were missing
+
+```
+
+
+```{r}
+WW_g_predict <- POM_meandata %>% 
+  filter(Species != "Pyrosoma atlanticum" & Species != "POM" & Species != "Atolla wyvillei" & Species != "Cranchidae")
+
+
+# Fit a linear model
+model_ww_pred <- lm(TP ~ predicted_WW, data = WW_g_predict )
+
+# Extract the R-squared value
+r_squared <- summary(model_ww_pred)$r.squared
+
+# Create the scatterplot with a line of best fit and display the R-squared value
+ggplot(model_ww_pred, aes(x = predicted_WW, y = TP)) +
+  geom_point(alpha = 0.6) +  # Scatterplot points with some transparency
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +  # Line of best fit with confidence interval
+  labs(x = "Size (g)", y = "Trophic Position (TP)", 
+       title = "Scatterplot of Trophic Position vs. Size with Line of Best Fit") +
+  annotate("text", x = Inf, y = Inf, label = paste("R² =", round(r_squared, 3)), 
+           hjust = 1.1, vjust = 1.5, size = 5, color = "black") +  # Add R-squared annotation
+  theme_minimal()
+
+```
+
+
+
+
+
+
