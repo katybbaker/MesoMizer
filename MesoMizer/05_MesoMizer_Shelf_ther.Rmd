@@ -24,6 +24,7 @@ library(therMizer)
 library(sensobol)
 library(sensitivity)
 library(dietr)
+library(rgl)
 
  
  rm(list =ls()) # clear memory
@@ -60,17 +61,16 @@ knitr::kable(param_description, caption = "parameters' description")
 sp_1 <-
   data.frame(
     "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp","Bathylagus spp","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
-    "w_inf" = c(0.417,0.318,1.7,0.1,26.78,58.3,1.62,81.43,20,3.6,0.28,375.8,12),
-    "beta" = c(log10(7.2),log10(7.2),log10(2),log10(2),log10(2),log10(2),log10(2),log10(2),log10(1.4),log10(1.35),log10(1.35),log10(7.7),log10(3.7)),
+    "w_inf" = c(0.417,0.318,1.7,0.1,26.78,58.3,3.0,81.43,20,1.0,0.28,0.3,12), #check cyclothone in fishbase & chaetognath in sealifebase - also changed pyrosomes to weight of individual zooids - document assumptions
+    "beta" = c(15849000, 15849000, 100, 100, 100, 100, 100, 100, 25, 22, 22, 50119000, 5012), #lower ppmr for piscivores, higher for omnivores and planktivores
     "biomass_observed" = c(0.1970, 0.1582, 0.0704,0.1012,0.6665,0.0658,0.4307,0.1493,0.2333,4.3799,0.0126,31.4392,0.1215), #biomass in g m-2. See Biomass_SOLACE.rmd
     "k_vb" = c(0.6, 0.4, 0.8, 0.6, 0.2, 0.4, 0.9, 0.5, 0.4, 0.2, 0.2,0.2,0.2),
     "gear_mort" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
     "RQ" = c(0.9, 0.9, 1.0, 0.9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8, 1.0), #0.8 - herbivores, 0.9 omnivores and 1 carnivores
     "p_FC" = c(0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4), # carbon content of fecal pellets (%)
     "z0" = c(0.1, 0.1, 0.1,0.1, 0.1, 0.1, 0.1, 0.1, 0.1,0.1, 0.1, 0.1, 0.1), # carrion parameter - may delete
-   "rho" = c(200, 200, 200, 200, 200, 200,200, 200, 200,200, 200, 200,200) # carrion parameter - may delete
-  )
-#"sigma" = c(0.7,0.7, 1.3,1.3,1.3,1.3,1.3,1.3,1.3,0.46,0.57,0.7,0.52)) - this causes p. atlanticum to go extinct(too narrow... factor these in later)
+   "rho" = c(200, 200, 200, 200, 200, 200,200, 200, 200,200, 200, 200,200)) # carrion parameter - may delete
+#"sigma" = c(0.7,0.7, 1.3,1.3,1.3,1.3,1.3,1.3,1.3,0.46,0.57,0.7,0.52)) #- this causes p. atlanticum to go extinct(too narrow... factor these in later)
 
               
 knitr::kable(sp_1, caption = "species' parameters")
@@ -107,38 +107,98 @@ sp_1_inter <- matrix (c(
 
 knitr::kable(sp_1_inter, caption = "species' interactions")
 
+# Convert the interaction matrix to a data frame
+sp_1_inter_df <- as.data.frame(sp_1_inter)
+
+# Ensure row names are preserved as a column (optional)
+sp_1_inter_df$Predator <- rownames(sp_1_inter_df)
+
+# Rearrange columns so 'Predator' is the first column (optional)
+sp_1_inter_df <- sp_1_inter_df[, c(ncol(sp_1_inter_df), 1:(ncol(sp_1_inter_df) - 1))]
+
+write.csv(sp_1_inter_df, "sp_1_interactions.csv", row.names = FALSE)
+
+# Print the data frame using knitr::kable for display
+knitr::kable(sp_1_inter_df, caption = "Species' interactions")
+
 
 
 ```
+#add in DVM based on % of community at each depth
+```{r}
+#predator = row, prey = column
+#sp_2_inter reflects feeding type and DVM
+sp_2_inter <- matrix(c(
+  0, 0, 0.67, 0.78, 0.42, 0.07, 0.154, 0.07, 0.87, 0.93, 0.07, 0, 0.21,
+  0, 0, 0.55, 0.66, 0.3, 0.03, 0.114, 0.03, 0.83, 0.89, 0.03, 0, 0.09,
+  0, 0, 1, 0.89, 0.62, 0.35, 0.434, 0.35, 0.7, 0.66, 0.35, 0, 0.4,
+  0, 0, 0.89, 1, 0.57, 0.29, 0.374, 0.29, 0.81, 0.77, 0.29, 0, 0.35,
+  0, 0, 0, 0, 1, 0.22, 0.304, 0.22, 0.45, 0.41, 0.22, 0, 0.78,
+  0, 0, 0, 0, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0, 0.21,
+  0, 0, 0, 0, 0.304, 0.916, 1, 0.916, 0.284, 0.214, 0.916, 0, 0.238,
+  0, 0, 0, 0, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0, 0.21,
+  0, 0, 0, 0, 0.45, 0.2, 0.284, 0.2, 1, 0.93, 0.2, 0, 0.24,
+  0, 0, 0, 0, 0.41, 0.13, 0.214, 0.13, 0.93, 1, 0.13, 0, 0.2,
+  0, 0, 0, 0, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0, 0.21,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0.4, 0.35, 0.78, 0.21, 0.238, 0.21, 0.24, 0.2, 0.21, 0, 1
+), nrow = 13,
+
+  dimnames = list(sp_1$species, sp_1$species) )
+
+knitr::kable(sp_1_inter, caption = "species' interactions")
+
+# Convert the interaction matrix to a data frame
+sp_2_inter_df <- as.data.frame(sp_2_inter)
+
+# Ensure row names are preserved as a column (optional)
+sp_2_inter_df$Predator <- rownames(sp_2_inter_df)
+
+# Rearrange columns so 'Predator' is the first column (optional)
+#sp_2_inter_df <- sp_2_inter_df[, c(ncol(sp_2_inter_df), 1:(ncol(sp_2_inter_df) - 1))]
+
+write.csv(sp_2_inter_df, "sp_2_interactions.csv", row.names = FALSE)
+
+# Print the data frame using knitr::kable for display
+knitr::kable(sp_2_inter_df, caption = "Species' interactions")
+
+
+```
+
+
 
 # Tune params
 
+
 ```{r}
-sp_1<- newMultispeciesParams(sp_1, sp_1_inter, w_pp_cutoff = 1 ) #double check w_pp_cutoff
-species_params(sp_1)
+#sp_1<- newMultispeciesParams(sp_1, sp_1_inter, w_pp_cutoff = 0.01 ) #double check w_pp_cutoff
+# species_params(sp_1)
 
-params_v1 <- readRDS("tuned_params_v3.rds")
+# sp_2 <- newMultispeciesParams(sp_1, sp_2_inter, w_pp_cutoff = 0.01)
+# params_v1 <- setParams(sp_2)
+# params_v1 <- tuneParams(sp_2)
 
-params_v1 <- tuneParams(params_v1)
-
-species_params_df <- params_v1@species_params
-write.csv(species_params_df, file = "species_params.csv", row.names = FALSE)
+params_v0 <- readRDS("tuned_params_DVM1.rds")
+params_v0 <- tuneParams(params_v0)
 
 
-plotSpectra(params_v1)
+
 
 
 ```
+
+
+
+
 # Thermizer -> set thermal tolerances for species
 
 ```{r}
-# Thermizer code placeholder - not integrated into model yet 
 
-# Assign them thermal tolerance limits - not accurate thresholds - will look these up
-temp_min <- c(-5, 5,-5, 5,-5, 5,-5, 5,-5, 5,-5, 5,5)
-temp_max <- c(10, 20,10, 20,10, 20,10, 20,10, 20,10, 20,10)
-species_params(params_v1)$temp_min <- temp_min
-species_params(params_v1)$temp_max <- temp_max
+# Assign them thermal tolerance limits - general thresholds - will look these up
+temp_min <- c(-5, -5,-5, -5,-5, -5,-5, -5,-5, -5,-5, 0,-5)
+temp_max <- c(13, 13,13, 13,13, 13,13, 13,13, 12,13, 20,13) #revisit
+species_params(params_v0)$temp_min <- temp_min
+species_params(params_v0)$temp_max <- temp_max
 ```
 
 
@@ -146,8 +206,8 @@ species_params(params_v1)$temp_max <- temp_max
 
 ```{r}
 realm_names <- c("Epi","Umeso","Lmeso")
-species_names <- as.character(params_v1@species_params$species)
-sizes <- params_v1@w
+species_names <- as.character(params_v0@species_params$species)
+sizes <- params_v0@w
 
 # Create the vertical migration array and fill it
 vertical_migration_array <- array(0, dim = (c(length(realm_names), 
@@ -161,18 +221,18 @@ Lmeso <- which(realm_names == "Lmeso")
 
 # Define a list of species and their corresponding time allocations - based on average % per depth from SOLACE (Biomass_SOLACE.rmd)
 species_allocations <- list(
-  "Lampanyctus australis" = c(Epi = 0.21, Umeso = 0.57, Lmeso = 0.2),
-  "Euphausia similis" = c(Epi = 0.79, Umeso = 0.14, Lmeso = 0.065),
-  "Thysannoessa macura" = c(Epi = 0.91, Umeso = 0.06, Lmeso = 0.021),
+  "Lampanyctus australis" = c(Epi = 0.21, Umeso = 0.57, Lmeso = 0.22),
+  "Euphausia similis" = c(Epi = 0.79, Umeso = 0.14, Lmeso = 0.07),
+  "Thysannoessa macura" = c(Epi = 0.91, Umeso = 0.06, Lmeso = 0.03),
   "Sergestes spp" = c(Epi = 0.46, Umeso = 0.19, Lmeso = 0.35),
   "Themisto spp" = c(Epi = 0.57, Umeso = 0.14, Lmeso = 0.29),
   "Nannobrachium achirus" = c(Epi = 0, Umeso = 0, Lmeso = 1),
-  "Cyclothone spp" = c(Epi = 0.056, Umeso = 0.028, Lmeso = 0.91), 
+  "Cyclothone spp" = c(Epi = 0.056, Umeso = 0.028, Lmeso = 0.916), 
   "Bathylagus spp" = c(Epi = 0, Umeso = 0, Lmeso = 1),
-  "Cranchidae" = c(Epi = 0.76, Umeso = 0.038, Lmeso = 0.19),
-  "Chaetognath" = c(Epi = 0.80, Umeso = 0.07, Lmeso = 0.12),
+  "Cranchidae" = c(Epi = 0.76, Umeso = 0.04, Lmeso = 0.20),
+  "Chaetognath" = c(Epi = 0.80, Umeso = 0.07, Lmeso = 0.13),
   "Gymnosomata" = c(Epi = 0, Umeso = 0, Lmeso = 1),
-  "Pyrosoma atlanticum" = c(Epi = 0.43, Umeso = 0.54, Lmeso = 0.02),
+  "Pyrosoma atlanticum" = c(Epi = 0.43, Umeso = 0.54, Lmeso = 0.03),
   "Atolla wyvillei" = c(Epi = 0, Umeso = 0.79, Lmeso = 0.21)
 )
 
@@ -203,41 +263,114 @@ for (r in seq(1,length(realm_names),1)) {
 }
 
 
-# Create temperature array and fill it
+# Create temperature array with constant values per depth layer
 times <- 0:500
 ocean_temp_array <- array(NA, dim = c(length(times), length(realm_names)), 
-                    dimnames = list(time = times, realm = realm_names))
-temp_inc <- 0
-for (i in 1:501) {
-  ocean_temp_array[i,] <- c(-4 + temp_inc, -1 + temp_inc, 11 + temp_inc) #this should reflect the temp at each depth but check
-  temp_inc <- temp_inc + 0.01
+                          dimnames = list(time = times, realm = realm_names))
+
+# Set constant temperatures for each realm
+for (i in 1:length(times)) {
+  ocean_temp_array[i,] <- c(10.5, 10, 7.5) # 10.5°C for Epi, 10°C for Umeso, 7.5°C for Lmeso
 }
 
 ```
 
 
-### upgrade therParams
+### upgrade therParams - (incorporate temp)
 
 ```{r}
-#to be completed later
 
-#params <- upgradeTherParams(params = params_v1, 
-                          #  temp_min = temp_min,
-                          #  temp_max = temp_max,
-                          #  ocean_temp_array = ocean_temp_array,
+
+params_v1 <- upgradeTherParams(params = params_v0, 
+                            temp_min = temp_min,
+                            temp_max = temp_max,
+                            ocean_temp_array = ocean_temp_array,
                            # n_pp_array = n_pp_array, 
-                          #  vertical_migration_array = vertical_migration_array,
-                          #  exposure_array = exposure_array, 
-                          #  aerobic_effect = TRUE, 
-                          #  metabolism_effect = TRUE)
+                            vertical_migration_array = vertical_migration_array,
+                            exposure_array = exposure_array, 
+                            aerobic_effect = TRUE, 
+                            metabolism_effect = TRUE)
                                 
 
+species_params_df <- params_v1@species_params
+write.csv(species_params_df, file = "species_params.csv", row.names = FALSE)
 
 ```
+
+
+#plots---------------------------------------------------------------------
+
+```{r}
+
+sim_2 <- project(params_v1)
+
+
+
+# Plot with increased text size
+plotSpectra(params_v1, power = 0, total = TRUE) + 
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14),  # Adjust size of axis text
+    axis.title = element_text(size = 16), # Adjust size of axis titles
+    legend.text = element_text(size = 12), # Adjust size of legend text
+    legend.title = element_text(size = 14) # Adjust size of legend title
+  )
+
+# Save the plot
+ggsave("size_spectra_power0.png")
+
+# Plot with increased text size
+plotSpectra(params_v1, power = 1, total = FALSE) + 
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14),  # Adjust size of axis text
+    axis.title = element_text(size = 16), # Adjust size of axis titles
+    legend.text = element_text(size = 12), # Adjust size of legend text
+    legend.title = element_text(size = 14) # Adjust size of legend title
+  )
+
+# Save the plot
+ggsave("size_spectra_power1.png")
+
+plotSpectra(params_v1, power = 1, total = TRUE) + theme_minimal()
+
+
+plotSpectra(params_v1, power = 2, total = TRUE) + theme_minimal() #slope should be close to zero - biomass constant over log size bins
+
+ggsave("size_spectra.png")
+
+plotDiet(params_v1)
+ggsave("diet_proportion.png")
+
+plotDeath(params_v1, proportion = T)   + theme_minimal()
+ggsave("Death_proportion.png")
+
+
+plotBiomassObservedVsModel(params_v1, labels = FALSE) + theme_minimal()
+ggsave("biomassobservedvmodel.png")
+
+
+plotGrowthCurves(params_v1, species_panel = T)  + theme_minimal()
+ggsave("Growth_curves.png")
+
+plotEnergyBudget(params_v1)
+
+slope_biomass <- getCommunitySlope(sim_2)
+
+slope_biomass[1,]
+slope_biomass[100,]
+
+plot(slope_biomass)
+
+```
+
+
 
 # Carbon outputs
 
 ### 1. Respiratory carbon (DIC)
+
+#### 1a. Get metabolic rates per species & size
 
 ```{r}
 #Get metabolic rate per species and size (g m-2 y-1)
@@ -257,7 +390,7 @@ ggplot(metabolic_rates_df, aes(x = Size, y = Metabolic_Rate, color = as.factor(S
   theme_minimal()
 ```
 
-### incorporate abundances (n_initial)
+### 1.b incorporate abundances (n_initial)
 
 ```{r}
 # Function to calculate respired carbon per species and size
@@ -313,12 +446,22 @@ RC_p <- ggplot(respiration_long, aes(x = Size, y = respiration_production, color
 ```
 
 
-## 1a. Convert Mizer metabolic rate (g y-1) to respiratory oxygen uptake (L h-1) then respired carbon (g C m-2 h-1)
+## 1c. Convert Mizer metabolic rate (g y-1) to respiratory oxygen uptake (L h-1) then respired carbon (g C m-2 h-1)
 
 
 ```{r}
 
-# Constants
+#RC = RO * RQ * (12/22.4) #Kwong et al. 2020
+    #RC: respiratory carbon (g C ind-1 h-1); 
+    #RO: respiratory oxygen uptake (L O2 ind-1 h-1); 
+    #RQ: respiratory quotient (unit-less);
+    #12: molar weight of carbon (g mol-1); 
+    #22.4: molar volume of an ideal gas at standard pressure (mol L-1)
+    #TD = time at depth
+
+#to convert metabolic rate (respiration_production) to RO - must convert to energy (KJ) using these assumptions:
+
+# Constants ----- include reference
 energy_content <- 22         # kJ per gram based on a mixed diet - could make this more dynamic to reflect feeding types
 oxygen_conversion <- 20.1      # kJ per liter of O2
 hours_per_year <- 8760         # Number of hours in a year
@@ -430,11 +573,10 @@ print(feces_long)
 
 
 
-## 2b. Convert feces (g m-2 y-1) to (g m-2 C y-1)
+## 2b. Convert feces (g m-2 y-1) to (g m-2 C h-1)
 
 
 ```{r}
-#check time units......
 
 # Extract the p_FC (carbon % per fecal pellet) parameter from params_v1
 p_FC <- params_v1@species_params$p_FC
@@ -548,7 +690,7 @@ CC_p <- ggplot(ext_mort_rates_long, aes(x = Size, y = ext_mort_rates, color = Sp
   scale_x_log10() +
   labs(title = "Carcass weight (g) per Size for Each Species",
        x = "Size (g)",
-       y = "g C m-2 h-1",
+       y = "g C m-2 y-1",
        color = "Species") +
   theme_minimal()
 
@@ -559,8 +701,8 @@ CC_p <- ggplot(ext_mort_rates_long, aes(x = Size, y = ext_mort_rates, color = Sp
 
 
 carcass_carbon_df <- ext_mort_rates_long %>% 
-  mutate(g_C = ext_mort_rates * 0.4) %>% # change this to species specific carbon content
-  mutate(carcass_C = g_C * 0.1713287/hours_per_year) #constant taken from MizerShelf - proportion of ext_mort that produces carrion
+  mutate(g_C = ext_mort_rates * 0.4) %>% # change this to species specific carbon content (or leave as assumption - Steinberg et al. 2017?)
+  mutate(carcass_C = g_C * 0.1713287/hours_per_year) #constant taken from MizerShelf - proportion of ext_mort that produces carrion (i.e. some of the external mortality will not contribute to carrion production due to consumption from non-modeled species like sea birds)
 
 
 carrion_p <- ggplot(carcass_carbon_df, aes(x = Size, y = carcass_C, color = as.factor(Species))) +
@@ -876,7 +1018,14 @@ Total_DIC_pools <- ggplot(merged_df, aes(x = total_DIC_mg , y = Layer, fill = Sp
   theme_minimal() +
   labs(x = "DIC (mg C m-2 d-1)", y = "Depth Stratum") +
   scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
-  theme(legend.title = element_blank())
+  theme(legend.title = element_blank()) +
+  theme(
+    axis.text = element_text(size = 14),  # Adjust size of axis text
+    axis.title = element_text(size = 16), # Adjust size of axis titles
+    legend.text = element_text(size = 12), # Adjust size of legend text
+    legend.title = element_text(size = 14) # Adjust size of legend title
+  )
+
 
 # Plot the graph
 Total_DIC_pools
@@ -884,6 +1033,16 @@ Total_DIC_pools
 
 
 ggsave("Total_DIC_pools.png", plot = Total_DIC_pools)
+
+```
+```{r}
+DIC_per_layer <- merged_df %>% 
+  group_by(Layer) %>% 
+  mutate(total_layer_DIC_mg = sum(total_DIC_mg)) %>% 
+  ungroup() %>% 
+  group_by(Species, Layer) %>% 
+  mutate(percent_cont = total_DIC_mg/total_layer_DIC_mg)
+
 
 ```
 
@@ -918,235 +1077,6 @@ ggsave("Total_DIC_pools_white.png", plot = Total_DIC_pools_white, width = 7, hei
 ```
 
 
-
-# 5. Get Trophic Position
-
-###- need to revisit this - pyrosome trophic levels too high
-
-```{r}
-
-
-diet <- getDiet(params_v1)
-
-# Assuming 'diet_avg' contains mean diet proportions for each predator
-# with species as rows and prey items (including 'Resource') as columns
-
-# Step 1: Verify and filter columns to ensure only prey species are included
-# Remove columns that represent size classes or are numeric
-diet_avg_df <- as.data.frame(diet_avg)
-
-# Ensure only prey species columns are retained (remove columns with numeric names)
-diet_avg_df <- diet_avg_df[, !grepl("^[0-9.]+$", colnames(diet_avg_df))]
-diet_avg_df$Predator <- rownames(diet_avg_df)
-
-# Convert the diet_avg_df to a long format data frame for DietItems
-DietItems <- melt(diet_avg_df, id.vars = "Predator", variable.name = "FoodItem", value.name = "Percent")
-
-# Remove rows where the diet proportion is 0, as they don't contribute to diets
-DietItems <- DietItems[DietItems$Percent > 0,]
-
-# Step 2: Get unique prey items from DietItems
-prey_names <- unique(DietItems$FoodItem)
-
-# Step 3: Assign realistic trophic levels to prey items
-# Update with appropriate trophic levels based on your ecosystem
-prey_trophic_levels <- c(
-  Resource = 1,             # Primary producer
-  `Euphausia similis` = 2,  # Herbivore
-  `Thysannoessa macura` = 2,  # Herbivore
-  `Sergestes spp` = 2.5,    # Omnivore
-  `Themisto spp` = 3,       # Carnivore
-  `Lampanyctus australis` = 3.5,  # Higher carnivore
-  `Nannobrachium achirus` = 3.5,  # Higher carnivore
-  `Cyclothone spp` = 2.5,   # Omnivore
-  `Bathylagus spp` = 3,     # Carnivore
-  `Cranchidae` = 3,         # Carnivore
-  `Chaetognath` = 3.5,      # Higher carnivore
-  `Gymnosomata` = 2,        # Herbivore
-  `Pyrosoma atlanticum` = 1.5,  # Filter feeder
-  `Atolla wyvillei` = 3     # Carnivore
-)
-
-# Step 4: Identify missing prey items
-missing_prey <- prey_names[!prey_names %in% names(prey_trophic_levels)]
-
-# Print missing prey items for manual assignment
-if (length(missing_prey) > 0) {
-  print("Missing prey items:")
-  print(missing_prey)
-  stop("Not all prey items have assigned trophic levels. Please update 'prey_trophic_levels'.")
-}
-
-# Step 5: Create Prey Values data frame (PreyMat) using the unique prey items from DietItems
-# and their corresponding trophic levels
-prey_TL <- sapply(prey_names, function(x) prey_trophic_levels[x])
-prey_SE <- rep(0, length(prey_names))  # Set SE to 0 if not known
-
-PreyMat <- data.frame(FoodItem = prey_names, TL = prey_TL, SE = prey_SE)
-
-# Step 6: Create Taxonomy data frame (Taxonomy)
-# Since you have species-level data, create a simple Taxonomy data frame
-Taxonomy <- data.frame(Individual = DietItems$Predator,
-                       Species = DietItems$Predator)  # Assuming each predator is a unique species
-
-# Step 7: Use DietTroph to calculate trophic levels
-HM_TL <- DietTroph(DietItems = DietItems,
-                   PreyValues = PreyMat,
-                   PreyClass = "FoodItem",
-                   Taxonomy = Taxonomy,
-                   SumCheck = TRUE)
-
-# Step 8: HM_TL will be a list containing trophic level calculations
-# Access the results for species level
-trophic_levels_df <- HM_TL$Species
-print(trophic_levels_df)
-
-
-
-
-```
-
-
-
-
-
-# 6. sobol sensitivity analysis - needs revisiting, not currently running
-
-## 1. Dummy model
-```{r}
-
-# Step 1: Define a simple dummy model
-dummy_model <- function(X) {
-  a <- X[, 1]
-  b <- X[, 2]
-  c <- X[, 3]
-  
-  # Example model: output = a * b + c^2
-  output <- a * b + c^2
-  return(output)
-}
-
-# Step 2: Define the parameter bounds for the Sobol analysis
-# Parameter ranges:
-# a ∈ [0.5, 2], b ∈ [1, 3], c ∈ [0, 1]
-
-# Create a function to sample the parameters using uniform distribution
-param_sample <- function(N) {
-  a <- runif(N, 0.5, 2)
-  b <- runif(N, 1, 3)
-  c <- runif(N, 0, 1)
-  return(cbind(a, b, c))
-}
-
-
-
-```
-
-# 2. Attempt 1
-```{r}
-# # Define the function to run the Mizer model and get the community slope
-# run_mizer_model <- function(k_vb, w_inf, beta) {
-#   # Update species parameters in params_v1 for each species
-#   params_v1@species_params$k_vb <- k_vb
-#   params_v1@species_params$w_inf <- w_inf
-#   params_v1@species_params$beta <- beta
-#   
-#   # Run the Mizer model
-#   results <- project(params_v1)
-#   
-#   # Extract the community size spectrum slope
-#   community_slope <- getCommunitySlope(results)
-#   
-#   # Return the community slope as output
-#   return(community_slope)
-# }
-# 
-# Define the base parameters for all 13 species
-k_vb <- params_v1@species_params$k_vb  # Growth rate for each species
-w_inf <- params_v1@species_params$w_inf  # Asymptotic weight for each species
-beta <- params_v1@species_params$beta  # Predator-prey mass ratio for each species
-# 
-# 
-# Define the ranges for each species' parameters (±10%)
-k_vb_lower <- k_vb * 0.9
-k_vb_upper <- k_vb * 1.1
-w_inf_lower <- w_inf * 0.9
-w_inf_upper <- w_inf * 1.1
-beta_lower <- beta * 0.9
-beta_upper <- beta * 1.1
-
-
-
-
-
-```
-
-
-
-# 3. attempt 3
-```{r}
-# Function to adjust parameters by ±10%, run a simulation, and get the total community biomass at the last timestep
-mizer_model <- function(X) {
-  # Copy params_v1 to avoid overwriting the original params for each sample
-  params_copy <- params_v1
-
-  # Loop through each species and adjust the k_vb, w_inf, and beta parameters by ±10%
-  for (i in 1:13) {
-    # Update k_vb for species i
-    params_copy@species_params$k_vb[i] <- params_v1@species_params$k_vb[i] * (1 + X[i, (i - 1) * 3 + 1])
-
-    # Update w_inf for species i
-    params_copy@species_params$w_inf[i] <- params_v1@species_params$w_inf[i] * (1 + X[i, (i - 1) * 3 + 2])
-
-    # Update beta for species i
-    params_copy@species_params$beta[i] <- params_v1@species_params$beta[i] * (1 + X[i, (i - 1) * 3 + 3])
-  }
-
-  # Run the simulation using project()
-  sim_results <- project(params_copy)
-
-  # Extract the last timestep results
-  last_timestep <- tail(dimnames(sim_results@n)$time, 1)
-
-  # Ensure the last timestep is numeric, if not, coerce it
-  last_timestep_numeric <- as.numeric(last_timestep)
-
-  # Sum biomass across all species and all size classes at the last timestep
-  total_community_biomass <- sum(sim_results@n[, , last_timestep_numeric])  # Sum across species and size classes
-  
-  return(total_community_biomass)  # Return the total community biomass for the current sample
-}
-
-
-param_sample <- function(N) {
-  # Initialize matrices to hold the sampled values for each parameter
-  k_vb <- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for k_vb
-  w_inf<- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for w_inf
-  beta <- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for beta
-
-  # Combine all parameters into a single matrix (39 columns for 13 species, 3 params each)
-  return(cbind(k_vb, w_inf, beta))
-}
-
-# Number of samples
-N <- 10
-
-# Generate two independent sample sets
-X1 <- param_sample(N)
-X2 <- param_sample(N)
-
-# Run Sobol analysis
-sobol_result <- sobolSalt(model = mizer_model, X1 = X1, X2 = X2, scheme = "A")
-
-# Evaluate the model with the Sobol sample points
-sobol_result <- tell(sobol_result, mizer_model(sobol_result$X))
-
-# Plot or inspect results (first-order and total-effect indices)
-plot(sobol_result, choice = 1, main = "First-Order Sobol Indices")  # First-order indices
-plot(sobol_result, choice = 2, main = "Total-Effect Sobol Indices")  # Total-effect indices
-
-
-```
 
 
 
