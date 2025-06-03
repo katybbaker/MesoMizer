@@ -1,0 +1,138 @@
+---
+title: "model_comparision"
+output: html_document
+date: "2024-12-09"
+---
+
+```{r}
+
+library(tidyverse)
+library(dplyr)
+library(rlang)
+library(ggplot2)
+library(purrr)
+library(plotrix)
+library(viridis)
+rm(list = ls()) # clear memory
+
+
+POC_BGP <- read_csv("POC_flux_SOLACE_ST_06062024.csv")
+MMP <- read.csv("Output_MMP_flux.csv")
+modeled_DIC <- read.csv("modeled_DIC_no_epi.csv")
+
+```
+
+#BGP datawrangling
+
+```{r}
+#convert from mmol m2 d-1 to mg m-2 d-1
+
+# POC_BGP <- POC_BGP %>% 
+#    filter(!grepl("ST2|ST3", SED_TRAP)) %>% 
+#   mutate(mg_C_m2_d = POC_flux_mmol_m2_d* 12.01) %>%  #conversion -> mg = mmol * molecular weight (C = 12.01 g/mol)
+#   group_by(Site) %>% 
+#   mutate(mg_C_m2_d_av = mean(mg_C_m2_d),
+#         mg_C_m2_d_sd = sd(mg_C_m2_d),
+#         flux = "BGP") %>% 
+#   select(Site, flux,mg_C_m2_d_av, mg_C_m2_d_sd) %>% 
+#   unique() %>% 
+#   filter(Site == "SOTS") %>% 
+#   rename(mgC_m.2_d = mg_C_m2_d_av) %>% 
+#   rename(mod_type = flux)
+#   select(mgC_m.2_d, mod_type) %>% 
+#   mutate(Species = "POC")
+  
+  
+```
+
+
+#modeled DIC datawrangling
+
+```{r}
+
+# Transform the dataframe
+modeled_DIC_cleaned <- modeled_DIC %>%
+  select(-X) %>% # Remove the column X
+  filter(Layer != "Epi") %>% # Remove rows where Layer is "Epi"
+  group_by(Species) %>% # Group by Species and Layer
+  mutate(total_DIC_mg = sum(total_DIC_mg, na.rm = TRUE), .groups = "drop") %>% # Sum total_DIC_mg
+  select(-Layer) %>% # Remove the Layer column
+  distinct() %>% # Keep only unique rows
+  rename(mgC_m.2_d = total_DIC_mg) %>%  # Rename total_DIC_mg to mgC_m2_d
+  select(-.groups) %>% 
+  mutate(Species = recode(Species,
+                         "Euphausia similis" = "Krill",
+                         "Lampanyctus australis" = "Fish",
+                         "Pyrosoma atlanticum" = "P. atlanticum",
+                         "Chaetognath" = "Gelatinous (other)",
+                         "Sergestes spp" = "Crustacean (other)",
+                         "Themisto spp" = "Crustacean (other)",
+                         "Thysannoessa macura" = "Krill",
+                          "Cranchidae" = "Squid")) %>% 
+  group_by(Species) %>% 
+  mutate(mgC_m.2_d = sum(mgC_m.2_d)) %>% 
+  ungroup() %>% 
+  unique()
+```
+#MMP datawrangling
+
+```{r}
+
+
+# Transform the dataframe
+MMP_cleaned <- MMP %>%
+  select(Species, Station, mgC_m.2_d) %>% 
+  filter(Station == "SOTS") %>% # Remove rows where Layer is "Epi"
+  select(-Station) %>% 
+  mutate(mod_type = "Baker et al. (2025)") 
+
+  
+model_combined <- rbind(MMP_cleaned, modeled_DIC_cleaned)
+
+model_combined <- model_combined %>%
+  filter(!(Species %in% c("Neocalanus_tonsus", "Oithona spp.")))
+
+
+```
+
+#combined plot
+
+
+```{r}
+
+#colors (to match Baker et al., 2025)
+
+micronekton_colors <- plasma(6, begin = 0, end = 0.8)   
+
+
+# Combine micronekton 
+taxa_colors <- c(
+  "Gelatinous (other)" = micronekton_colors[1],
+  "P. atlanticum" = micronekton_colors[2],
+  "Krill" = micronekton_colors[3],
+  "Squid" = micronekton_colors[4],
+  "Crustacean (other)" = micronekton_colors[5],
+  "Fish" = micronekton_colors[6]
+)
+
+model_combined$Species <- factor(model_combined$Species, levels = names(taxa_colors))
+
+combined_plot <- ggplot(model_combined, aes(x = mod_type, y = mgC_m.2_d, fill = Species)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = taxa_colors) +
+  labs(x = "Model Type", y = "mg C m⁻² d⁻¹", fill = "Species") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0))
+
+combined_plot
+
+ggsave("Fig7_empiracle_v_mechanistic.png", plot = combined_plot, width = 7, height = 5)
+```
+
+
+
+
+
+
+
+
