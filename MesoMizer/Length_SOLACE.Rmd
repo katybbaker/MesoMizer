@@ -1,0 +1,111 @@
+---
+title: "size contribution"
+output: html_document
+date: "2025-06-03"
+---
+
+```{r}
+ rm(list =ls()) # clear memory
+
+Lengths <- read.csv("Input_02_IN2020_V08_Lengths.csv")
+
+#filter for model species:
+
+library(dplyr)
+
+Lengths <- Lengths %>% 
+  # Filter relevant taxa from either column
+  filter(
+    Taxa_updated %in% c(
+      "Euphausia similis similis", "Sergestes spp.", "Lampanyctus australis", 
+      "Nannobrachium achirus", "Cyclothone spp.", "Bathylagus spp.", 
+      "Cranchiidae - undifferentiated", "Order Gymnosomata - undifferentiated", 
+      "Pyrosoma atlanticum", "Atolla wyvillei"
+    ) |
+    Species %in% c(
+      "Chaetognath", "Themisto", "themisto gudichaudii", 
+      "Phylum Chaetognatha - undifferentiated", "Thysanoessa macrura"
+    )
+  ) %>% 
+  # Rename Species values
+  mutate(
+    Species = case_when(
+      Species == "Phylum Chaetognatha - undifferentiated" ~ "Chaetognath",
+      Species == "themisto gudichaudii" ~ "Themisto",
+      TRUE ~ Species
+    )
+  )
+
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# 1. Clean and prepare Taxa_updated
+Lengths <- Lengths %>%
+  mutate(Taxa_updated = case_when(
+    Taxa_updated == "Themisto gaudichaudii" ~ "Themisto",
+    Taxa_updated == "Phylum Chaetognatha - undifferentiated" ~ "Chaetognath",
+    Taxa_updated == "Hydromedusa" ~ NA_character_,  # mark for removal
+    TRUE ~ Taxa_updated
+  )) %>%
+  filter(!(is.na(Taxa_updated) & Species == "Hydromedusa")) %>%  # remove remaining Hydromedusa
+  mutate(Taxon_grouped = ifelse(is.na(Taxa_updated), Species, Taxa_updated))
+
+# 2. Plot histograms (unsmoothed)
+ggplot(Lengths, aes(x = Length_mm, fill = Taxon_grouped)) +
+  geom_histogram(binwidth = 2, color = "black", alpha = 0.7, position = "identity") +
+  facet_wrap(~ Taxon_grouped, scales = "free_x") +
+  theme_bw() +
+  labs(x = "Length (mm)", y = "Count", title = "Length Distributions by Taxon (Histogram)") +
+  theme(legend.position = "none")
+
+# 2. Plot smooth bell curves by taxon
+ggplot(Lengths, aes(x = Length_mm, fill = Taxon_grouped)) +
+  geom_density(alpha = 0.6, adjust = 1.2) +
+  facet_wrap(~ Taxon_grouped, scales = "free_x") +
+  theme_bw() +
+  labs(x = "Length (mm)", y = "Density", title = "Length Distributions by Taxon") +
+  theme(legend.position = "none")
+
+```
+```{r}
+
+
+# 1. Create a unified taxon name column
+Lengths <- Lengths %>%
+  mutate(Taxon_grouped = ifelse(is.na(Taxa_updated), Species, Taxa_updated))
+
+# 2. Plot smooth density (bell curve) by taxon, free x-axes
+ggplot(Lengths, aes(x = Length_mm, fill = Taxon_grouped)) +
+  geom_density(alpha = 0.6, adjust = 1.2) +
+  facet_wrap(~ Taxon_grouped, scales = "free_x") +
+  theme_bw() +
+  labs(x = "Length (mm)", y = "Density", title = "Length Distributions by Taxon") +
+  theme(legend.position = "none")
+
+```
+
+```{r}
+
+
+
+library(viridis)
+
+
+
+# 2. Plot smoothed length distributions with log x-axis and viridis color
+ggplot(Lengths, aes(x = Length_mm, color = Taxon_grouped)) +
+  geom_density(size = 1.2, adjust = 1.2) +
+  scale_x_log10() +
+  scale_color_viridis_d(option = "D", end = 0.95) +  # match viridis Mizer plot
+  theme_bw() +
+  labs(x = "Length (mm, log scale)", y = "Density",
+       title = "Smoothed Length Distributions by Taxon (log scale)") +
+  theme(legend.position = "right")
+
+
+```
+
