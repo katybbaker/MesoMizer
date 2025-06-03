@@ -1,5 +1,7 @@
 
 
+This script calculates modeled trophic position based on apriori TP from SIA
+
 ```{r}
 library(mizerExperimental)
 library(tidyverse)
@@ -32,7 +34,7 @@ SIA_TP$Species <- gsub("\\.", "", SIA_TP$Species)
 SIA_TP$Species <- gsub("Nannobranchium achirus", "Nannobrachium achirus", SIA_TP$Species)
 
 
-params_v1 <- readRDS("tuned_params_v3.rds")
+params_v1 <- readRDS("tuned_params DVM2.rds")
 
 plotDiet(params_v1)
 ```
@@ -173,6 +175,10 @@ SIA_TP_clean <- SIA_TP %>%
 trophic_positions_by_size$DataSource <- "Modeled"
 SIA_TP_clean$DataSource <- "Stable Isotope"
 
+TP_modeled_apriori <- trophic_positions_by_size
+TP_modeled_apriori$DataSource <- "Modeled_apriori"
+
+write.csv(TP_modeled_apriori, "TP_modeled_apriori.csv")
 
 # Combine the two datasets
 combined_TP <- bind_rows(trophic_positions_by_size, SIA_TP_clean)

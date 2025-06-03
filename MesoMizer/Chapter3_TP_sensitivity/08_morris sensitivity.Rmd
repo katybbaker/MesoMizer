@@ -1,0 +1,111 @@
+---
+title: "08_morris sensitivity"
+output: html_document
+date: "2024-11-06"
+---
+
+```{r}
+library(mizer)
+library(sensitivity)
+
+rm(list =ls()) # clear memory
+
+params_v1 <- readRDS("tuned_params_v5.rds")
+
+```
+
+```{r}
+
+# Test the model with fixed parameters to ensure project() runs correctly
+
+test_fixed_model <- function() {
+  params_temp <- params_v1  # Start with a fresh params_v1
+  
+  # Apply non-perturbed (base) values directly to check functionality
+  for (param in parameters) {
+    if (param %in% colnames(params_temp@species_params)) {
+      base_values <- params_temp@species_params[[param]]
+      params_temp@species_params[[param]] <- base_values  # Apply base values
+    }
+  }
+
+  # Attempt to project the model and capture any issues
+  model_output <- tryCatch({
+    project(params_temp)
+  }, error = function(e) {
+    warning("Error in model projection with fixed values: ", conditionMessage(e))
+    return(NA)
+  })
+
+  # Check and return result of fixed model output
+  if (!is.na(model_output)) {
+    community_spectrum <- getCommunitySlope(model_output)
+    return(sum(community_spectrum, na.rm = TRUE))
+  } else {
+    return(NA)
+  }
+}
+
+# Run the test
+test_result <- test_fixed_model()
+
+if (!is.na(test_result)) {
+  print("Test successful, project() runs with fixed parameters.")
+} else {
+  print("Test failed, project() may have issues with parameters.")
+}
+
+
+```
+
+```{r}
+# Function to run Morris sensitivity with isolated perturbations and diagnostics
+run_morris_isolated <- function(params, parameters, perturbation = 0.1) {
+  results <- list()
+  
+  for (param in parameters) {
+    results[[param]] <- list()
+    
+    # Apply perturbation for each species in the selected parameter
+    for (i in 1:nrow(params@species_params)) {
+      species_name <- rownames(params@species_params)[i]
+      base_value <- params@species_params[[param]][i]
+      
+      # Perturb by +10%
+      params@species_params[[param]][i] <- base_value * (1 + perturbation)
+      output_plus <- tryCatch({
+        sum(getCommunitySlope(project(params)), na.rm = TRUE)
+      }, error = function(e) NA)
+      
+      # Perturb by -10%
+      params@species_params[[param]][i] <- base_value * (1 - perturbation)
+      output_minus <- tryCatch({
+        sum(getCommunitySlope(project(params)), na.rm = TRUE)
+      }, error = function(e) NA)
+      
+      # Reset to base value
+      params@species_params[[param]][i] <- base_value
+      
+      # Store results
+      results[[param]][[species_name]] <- list(increase = output_plus, decrease = output_minus)
+      
+      # Check for NA/Inf in outputs and log
+      if (is.na(output_plus) || is.na(output_minus)) {
+        warning(sprintf("NA or Inf in %s perturbation for %s", param, species_name))
+      }
+    }
+  }
+  
+  return(results)
+}
+
+# Define parameters to perturb and run the function
+selected_parameters <- c("k_vb", "w_inf", "biomass_observed", "ks")
+morris_diagnostics <- run_morris_isolated(params_v1, selected_parameters, 0.1)
+
+# Output diagnostic results
+print(morris_diagnostics)
+
+```
+
+

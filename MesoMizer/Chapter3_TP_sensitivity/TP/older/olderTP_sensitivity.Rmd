@@ -1,0 +1,260 @@
+---
+title: "older_TP&sensitivity"
+output: html_document
+date: "2024-11-12"
+---
+
+```{r}
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(reshape2)
+# remotes::install_github("gustavdelius/mizerShelf")
+library(mizerShelf)
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/therMizer")
+library(therMizer)
+#install.packages("sensobol")
+library(sensobol)
+library(sensitivity)
+library(dietr)
+library(rgl)
+
+ 
+ rm(list =ls()) # clear memory
+```
+
+
+
+# 5. Get Trophic Position
+
+###- need to revisit this - pyrosome trophic levels too high
+
+```{r}
+
+# 
+# diet <- getDiet(params_v1)
+# 
+# # Assuming 'diet_avg' contains mean diet proportions for each predator
+# # with species as rows and prey items (including 'Resource') as columns
+# 
+# # Step 1: Verify and filter columns to ensure only prey species are included
+# # Remove columns that represent size classes or are numeric
+# diet_avg_df <- as.data.frame(diet_avg)
+# 
+# # Ensure only prey species columns are retained (remove columns with numeric names)
+# diet_avg_df <- diet_avg_df[, !grepl("^[0-9.]+$", colnames(diet_avg_df))]
+# diet_avg_df$Predator <- rownames(diet_avg_df)
+# 
+# # Convert the diet_avg_df to a long format data frame for DietItems
+# DietItems <- melt(diet_avg_df, id.vars = "Predator", variable.name = "FoodItem", value.name = "Percent")
+# 
+# # Remove rows where the diet proportion is 0, as they don't contribute to diets
+# DietItems <- DietItems[DietItems$Percent > 0,]
+# 
+# # Step 2: Get unique prey items from DietItems
+# prey_names <- unique(DietItems$FoodItem)
+# 
+# # Step 3: Assign realistic trophic levels to prey items
+# # Update with appropriate trophic levels based on your ecosystem
+# prey_trophic_levels <- c(
+#   Resource = 1,             # Primary producer
+#   `Euphausia similis` = 2,  # Herbivore
+#   `Thysannoessa macura` = 2,  # Herbivore
+#   `Sergestes spp` = 2.5,    # Omnivore
+#   `Themisto spp` = 3,       # Carnivore
+#   `Lampanyctus australis` = 3.5,  # Higher carnivore
+#   `Nannobrachium achirus` = 3.5,  # Higher carnivore
+#   `Cyclothone spp` = 2.5,   # Omnivore
+#   `Bathylagus spp` = 3,     # Carnivore
+#   `Cranchidae` = 3,         # Carnivore
+#   `Chaetognath` = 3.5,      # Higher carnivore
+#   `Gymnosomata` = 2,        # Herbivore
+#   `Pyrosoma atlanticum` = 1.5,  # Filter feeder
+#   `Atolla wyvillei` = 3     # Carnivore
+# )
+# 
+# # Step 4: Identify missing prey items
+# missing_prey <- prey_names[!prey_names %in% names(prey_trophic_levels)]
+# 
+# # Print missing prey items for manual assignment
+# if (length(missing_prey) > 0) {
+#   print("Missing prey items:")
+#   print(missing_prey)
+#   stop("Not all prey items have assigned trophic levels. Please update 'prey_trophic_levels'.")
+# }
+# 
+# # Step 5: Create Prey Values data frame (PreyMat) using the unique prey items from DietItems
+# # and their corresponding trophic levels
+# prey_TL <- sapply(prey_names, function(x) prey_trophic_levels[x])
+# prey_SE <- rep(0, length(prey_names))  # Set SE to 0 if not known
+# 
+# PreyMat <- data.frame(FoodItem = prey_names, TL = prey_TL, SE = prey_SE)
+# 
+# # Step 6: Create Taxonomy data frame (Taxonomy)
+# # Since you have species-level data, create a simple Taxonomy data frame
+# Taxonomy <- data.frame(Individual = DietItems$Predator,
+#                        Species = DietItems$Predator)  # Assuming each predator is a unique species
+# 
+# # Step 7: Use DietTroph to calculate trophic levels
+# HM_TL <- DietTroph(DietItems = DietItems,
+#                    PreyValues = PreyMat,
+#                    PreyClass = "FoodItem",
+#                    Taxonomy = Taxonomy,
+#                    SumCheck = TRUE)
+# 
+# # Step 8: HM_TL will be a list containing trophic level calculations
+# # Access the results for species level
+# trophic_levels_df <- HM_TL$Species
+# print(trophic_levels_df)
+# 
+
+
+
+```
+
+
+
+
+
+# 6. sobol sensitivity analysis - needs revisiting, not currently running
+
+## 1. Dummy model
+```{r}
+
+# Step 1: Define a simple dummy model
+dummy_model <- function(X) {
+  a <- X[, 1]
+  b <- X[, 2]
+  c <- X[, 3]
+  
+  # Example model: output = a * b + c^2
+  output <- a * b + c^2
+  return(output)
+}
+
+# Step 2: Define the parameter bounds for the Sobol analysis
+# Parameter ranges:
+# a ∈ [0.5, 2], b ∈ [1, 3], c ∈ [0, 1]
+
+# Create a function to sample the parameters using uniform distribution
+param_sample <- function(N) {
+  a <- runif(N, 0.5, 2)
+  b <- runif(N, 1, 3)
+  c <- runif(N, 0, 1)
+  return(cbind(a, b, c))
+}
+
+
+
+```
+
+# 2. Attempt 1
+```{r}
+# # Define the function to run the Mizer model and get the community slope
+# run_mizer_model <- function(k_vb, w_inf, beta) {
+#   # Update species parameters in params_v1 for each species
+#   params_v1@species_params$k_vb <- k_vb
+#   params_v1@species_params$w_inf <- w_inf
+#   params_v1@species_params$beta <- beta
+#   
+#   # Run the Mizer model
+#   results <- project(params_v1)
+#   
+#   # Extract the community size spectrum slope
+#   community_slope <- getCommunitySlope(results)
+#   
+#   # Return the community slope as output
+#   return(community_slope)
+# }
+# 
+# Define the base parameters for all 13 species
+k_vb <- params_v1@species_params$k_vb  # Growth rate for each species
+w_inf <- params_v1@species_params$w_inf  # Asymptotic weight for each species
+beta <- params_v1@species_params$beta  # Predator-prey mass ratio for each species
+# 
+# 
+# Define the ranges for each species' parameters (±10%)
+k_vb_lower <- k_vb * 0.9
+k_vb_upper <- k_vb * 1.1
+w_inf_lower <- w_inf * 0.9
+w_inf_upper <- w_inf * 1.1
+beta_lower <- beta * 0.9
+beta_upper <- beta * 1.1
+
+
+
+
+
+```
+
+
+
+# 3. attempt 3
+```{r}
+# Function to adjust parameters by ±10%, run a simulation, and get the total community biomass at the last timestep
+mizer_model <- function(X) {
+  # Copy params_v1 to avoid overwriting the original params for each sample
+  params_copy <- params_v1
+
+  # Loop through each species and adjust the k_vb, w_inf, and beta parameters by ±10%
+  for (i in 1:13) {
+    # Update k_vb for species i
+    params_copy@species_params$k_vb[i] <- params_v1@species_params$k_vb[i] * (1 + X[i, (i - 1) * 3 + 1])
+
+    # Update w_inf for species i
+    params_copy@species_params$w_inf[i] <- params_v1@species_params$w_inf[i] * (1 + X[i, (i - 1) * 3 + 2])
+
+    # Update beta for species i
+    params_copy@species_params$beta[i] <- params_v1@species_params$beta[i] * (1 + X[i, (i - 1) * 3 + 3])
+  }
+
+  # Run the simulation using project()
+  sim_results <- project(params_copy)
+
+  # Extract the last timestep results
+  last_timestep <- tail(dimnames(sim_results@n)$time, 1)
+
+  # Ensure the last timestep is numeric, if not, coerce it
+  last_timestep_numeric <- as.numeric(last_timestep)
+
+  # Sum biomass across all species and all size classes at the last timestep
+  total_community_biomass <- sum(sim_results@n[, , last_timestep_numeric])  # Sum across species and size classes
+  
+  return(total_community_biomass)  # Return the total community biomass for the current sample
+}
+
+
+param_sample <- function(N) {
+  # Initialize matrices to hold the sampled values for each parameter
+  k_vb <- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for k_vb
+  w_inf<- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for w_inf
+  beta <- matrix(runif(N * 13, 0.5, 2), ncol = 13)  # Random values for beta
+
+  # Combine all parameters into a single matrix (39 columns for 13 species, 3 params each)
+  return(cbind(k_vb, w_inf, beta))
+}
+
+# Number of samples
+N <- 10
+
+# Generate two independent sample sets
+X1 <- param_sample(N)
+X2 <- param_sample(N)
+
+# Run Sobol analysis
+sobol_result <- sobolSalt(model = mizer_model, X1 = X1, X2 = X2, scheme = "A")
+
+# Evaluate the model with the Sobol sample points
+sobol_result <- tell(sobol_result, mizer_model(sobol_result$X))
+
+# Plot or inspect results (first-order and total-effect indices)
+plot(sobol_result, choice = 1, main = "First-Order Sobol Indices")  # First-order indices
+plot(sobol_result, choice = 2, main = "Total-Effect Sobol Indices")  # Total-effect indices
+
+
+```
+

@@ -1,0 +1,76 @@
+---
+title: "07_sensitivity_RC"
+output: html_document
+date: "2024-11-04"
+---
+
+
+```{r}
+library(multisensi)
+library(sensitivity)
+library(mizer)
+
+ rm(list =ls()) # clear memory
+```
+
+```{r}
+# Function to run Sobol sensitivity analysis on community respired carbon
+runsobol_respired_carbon <- function(k_vb.1, k_vb.2, k_vb.3, k_vb.4, k_vb.5, k_vb.6, k_vb.7, k_vb.8, k_vb.9, k_vb.10, k_vb.11, k_vb.12, k_vb.13) {
+  # Assign the new `k_vb` values to each species in `species_params2`
+  species_params2$k_vb[1] <- k_vb.1
+  species_params2$k_vb[2] <- k_vb.2
+  species_params2$k_vb[3] <- k_vb.3
+  species_params2$k_vb[4] <- k_vb.4
+  species_params2$k_vb[5] <- k_vb.5
+  species_params2$k_vb[6] <- k_vb.6
+  species_params2$k_vb[7] <- k_vb.7
+  species_params2$k_vb[8] <- k_vb.8
+  species_params2$k_vb[9] <- k_vb.9
+  species_params2$k_vb[10] <- k_vb.10
+  species_params2$k_vb[11] <- k_vb.11
+  species_params2$k_vb[12] <- k_vb.12
+  species_params2$k_vb[13] <- k_vb.13
+  
+  # Create MizerParams object with the updated `species_params2`
+  params <- newMultispeciesParams(species_params = species_params2, interaction = inter, kappa = 10, w_pp_cutoff = 2)
+  
+  # Run the simulation
+  sim <- project(params, effort = 0, t_max = 100, dt = 0.1, t_save = 1)
+  
+  # Extract modeled abundances for each species and size
+  n <- getN(sim)
+ # metabolic_rates <- params@species_params$metabolic_rate  # Ensure `species_params2` contains metabolic rates
+   metabolic_rates <- getMetabolicRate(species_params2)
+  
+  # Calculate total respired carbon per species and size
+  respired_carbon <- sweep(n, MARGIN = c(1, 2), metabolic_rates, `*`)
+  
+  # Constants
+  energy_content <- 22         # kJ per gram based on a mixed diet
+  oxygen_conversion <- 20.1    # kJ per liter of O2
+  hours_per_year <- 8760       # Number of hours in a year
+  oxygen_to_carbon <- 12 / 22.4  # Conversion factor from oxygen to carbon
+  
+  # Convert metabolic rates to grams of carbon per m^2 per hour
+  respired_carbon_df <- as.data.frame.table(respired_carbon)
+  colnames(respired_carbon_df) <- c("Timestep", "Species", "Size", "respiration_production")
+  
+  # Add oxygen uptake in liters per hour
+  respired_carbon_df <- respired_carbon_df %>% 
+    mutate(oxygen_uptake_liters_h = respiration_production * energy_content / oxygen_conversion / hours_per_year)
+  
+  # Add RQ values
+  respired_carbon_df$RQ <- params@species_params$RQ[match(respired_carbon_df$Species, params@species_params$species)]
+  
+  # Calculate respired carbon
+  respired_carbon_df <- respired_carbon_df %>% 
+    mutate(respired_carbon = oxygen_uptake_liters_h * RQ * oxygen_to_carbon)
+  
+  # Sum total respired carbon at the final timestep
+  total_respired_carbon <- sum(respired_carbon_df[respired_carbon_df$Timestep == 100, "respired_carbon"], na.rm = TRUE)
+  
+  return(total_respired_carbon)
+}
+
+```
+

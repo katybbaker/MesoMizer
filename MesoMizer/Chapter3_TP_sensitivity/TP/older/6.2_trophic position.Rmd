@@ -1,0 +1,201 @@
+---
+title: "6.2_trophic position"
+output: html_document
+date: "2024-10-20"
+---
+
+```{r}
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(reshape2)
+# remotes::install_github("gustavdelius/mizerShelf")
+library(mizerShelf)
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/therMizer")
+library(therMizer)
+#install.packages("sensobol")
+library(sensobol)
+library(sensitivity)
+library(dietr)
+
+ 
+ rm(list =ls()) # clear memory
+ 
+```
+
+```{r}
+
+params_v1 <- readRDS("tuned_params_v3.rds")
+
+# Step 1: Project the model
+mod <- project(params_v1)
+
+```
+
+```{r}
+# Step 1: Function to calculate average trophic position per species, considering the background resource
+calc_avg_trophic_position <- function(params, resourceTL = 1.7) {
+  # Get diet composition from params object
+  dietcomp <- getDiet(params)
+  
+  # Get species names and size classes
+  species <- dimnames(dietcomp)$predator
+  pred_size <- dimnames(dietcomp)$pred_size
+  
+  # Initialize trophic levels matrix with zeros
+  tlsum <- array(0, dim = c(length(species), length(pred_size)), 
+                 dimnames = list(predator = species, pred_size = pred_size))
+  
+  # Iteratively calculate trophic levels for all species
+  for (iter in 1:10) { # Iterate multiple times for convergence
+    for (i in 1:length(species)) { # Loop over predator species
+      pred <- species[i]
+      
+      # Get diet composition for this predator across all size classes and prey
+      spec_diet <- dietcomp[pred, , , drop = FALSE]
+      
+      # Calculate weighted average trophic level across all prey for each size class
+      tl_per_size <- apply(spec_diet, 2, function(diet) {
+        # Combine trophic levels for predators and the resource trophic level
+        prey_tl <- c(tlsum[, ], resourceTL)
+        
+        # Expand diet vector to include the resource as an additional prey option
+        diet <- c(diet, 1) 
+        
+        # Calculate the weighted average trophic level
+        weighted_tl <- sum(prey_tl * diet) / sum(diet)
+        
+        # Add 1 to represent predator being one level above its prey
+        return(1 + weighted_tl)
+      })
+      
+      # Update tlsum for this predator
+      tlsum[pred, ] <- tl_per_size
+    }
+  }
+  
+  # Calculate the average trophic level for each predator species across all size classes
+  avg_tl_per_species <- sapply(species, function(pred) {
+    mean(tlsum[pred, ], na.rm = TRUE)
+  })
+  
+  # Return the average trophic position for each species
+  return(avg_tl_per_species)
+}
+
+# Step 2: Apply the function to your params object
+average_trophic_positions <- calc_avg_trophic_position(params_v1)
+
+# Step 3: View the average trophic position per species
+print(average_trophic_positions)
+
+
+
+
+
+```
+
+```{r}
+# Step 1: Function to calculate average trophic position per species, considering the background resource
+calc_avg_trophic_position <- function(params, resourceTL = 1.7, debug = FALSE) {
+  # Get diet composition from params object
+  dietcomp <- getDiet(params_v1)
+  dietcomp <- data.frame(dietcomp)
+  
+  # Get species names and size classes
+  species <- dimnames(dietcomp)$predator
+  pred_size <- dimnames(dietcomp)$pred_size
+  prey_size <- dimnames(dietcomp)$prey_size
+  
+  # Initialize trophic levels matrix with zeros
+  tlsum <- array(0, dim = c(length(species), length(pred_size)), 
+                 dimnames = list(predator = species, pred_size = pred_size))
+  
+  # Set a flag to track changes in the trophic levels for convergence checking
+  converged <- FALSE
+  max_iterations <- 10
+  iteration <- 0
+  
+  # Iteratively calculate trophic levels for all species
+  while (!converged && iteration < max_iterations) {
+    if (debug) cat("Iteration:", iteration + 1, "\n")
+    
+    # Keep track of the previous trophic levels for checking convergence
+    previous_tlsum <- tlsum
+    
+    for (i in 1:length(species)) { # Loop over predator species
+      pred <- species[i]
+      
+      # Get diet composition for this predator across all size classes and prey
+      spec_diet <- dietcomp[pred, , , drop = FALSE]
+      
+      # Debug: Print summary of diet data for this predator
+      if (debug) {
+        cat("Summary of diet for species:", pred, "\n")
+        print(summary(spec_diet))
+      }
+      
+      # Calculate weighted average trophic level across all prey for each size class
+      tl_per_size <- apply(spec_diet, 2, function(diet) {
+        # Check if the sum of diet is zero or contains only NA values
+        if (all(is.na(diet)) || sum(diet, na.rm = TRUE) == 0) {
+          if (debug) cat("No diet data available for species:", pred, "- returning NA\n")
+          return(NA) # Return NA if no prey is present
+        }
+        
+        # Get the trophic levels for the prey based on the current tlsum for all species
+        prey_tl <- sapply(prey_size, function(prey) {
+          if (prey == "Resource") {
+            return(resourceTL) # Assign the resource trophic level
+          } else {
+            # Get the average trophic level of the prey across all sizes
+            prey_index <- which(species == prey)
+            return(mean(tlsum[prey_index, ], na.rm = TRUE))
+          }
+        })
+        
+        # Calculate the weighted average trophic level
+        weighted_tl <- sum(prey_tl * diet, na.rm = TRUE) / sum(diet, na.rm = TRUE)
+        
+        # Debug: Print weighted trophic level information
+        if (debug) cat("Weighted trophic level for", pred, ":", weighted_tl, "\n")
+        
+        # Add 1 to represent predator being one level above its prey
+        return(1 + weighted_tl)
+      })
+      
+      # Update tlsum for this predator
+      tlsum[pred, ] <- tl_per_size
+    }
+    
+    # Update iteration and check for convergence
+    iteration <- iteration + 1
+    delta <- max(abs(tlsum - previous_tlsum), na.rm = TRUE)
+    converged <- delta < 1e-4
+    
+    # Debug: Print if converged
+    if (debug) cat("Convergence reached:", converged, "\n")
+  }
+  
+  # Step 2: Calculate the average trophic level for each predator species across all size classes
+  avg_tl_per_species <- sapply(species, function(pred) {
+    mean(tlsum[pred, ], na.rm = TRUE)
+  })
+  
+  # Step 3: Return the average trophic position for each species
+  return(avg_tl_per_species)
+}
+
+# Apply the function to your params object with debugging enabled
+average_trophic_positions <- calc_avg_trophic_position(params_v1, resourceTL = 1.7, debug = TRUE)
+
+# View the average trophic position per species
+print(average_trophic_positions)
+
+
+```
+

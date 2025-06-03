@@ -1,0 +1,194 @@
+---
+title: "07_sensitivity_beniot code"
+output: html_document
+date: "2024-11-03"
+---
+
+#code from David Beniot
+
+```{r}
+library(multisensi)
+library(sensitivity)
+library(mizer)
+
+ rm(list =ls()) # clear memory
+ 
+```
+
+
+```{r}
+#Load mizer details
+species_params2 <- readRDS("tuned_params DVM2.rds")
+
+species_params2<- as.data.frame(species_params2@species_params)
+
+# View the resulting data frame
+head(species_params2)
+
+#i've left this out but need to double check it's appropriate - kapp = recruitment
+# kappa <- 10
+# species_params2$R_max <- kappa * species_params2$w_inf^(-1.5)
+# species_params2$R_max <- species_params2$R_max * 100
+
+
+
+```
+
+
+```{r}
+
+inter <-matrix <- matrix(c(
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0.6700000000000002, 0.55, 1, 0.8900000000000001, 0, 0, 0, 0, 0, 0.66, 0.35, 0.65, 0.4,
+  0.78, 0.6599999999999999, 0.8900000000000001, 1, 0, 0, 0, 0, 0, 0.7699999999999999, 0.29, 0.6000000000000001, 0.35,
+  0.42, 0.30000000000000004, 0.62, 0.57, 0.9999999999999999, 0.22, 0.304, 0.22, 0.45, 0.41000000000000003, 0.22, 0.78, 0.7799999999999999,
+  0.07, 0.03, 0.35, 0.29, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0.03, 0.21,
+  0.15400000000000003, 0.114, 0.434, 0.374, 0.304, 0.916, 1, 0.916, 0.28400000000000003, 0.21400000000000002, 0.916, 0.114, 0.238,
+  0.07, 0.03, 0.35, 0.29, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0.03, 0.21,
+  0.8700000000000001, 0.8300000000000001, 0.7, 0.81, 0.45, 0.2, 0.28400000000000003, 0.2, 1, 0.93, 0.2, 0.5, 0.24000000000000002,
+  0.9300000000000002, 0.8900000000000001, 0.66, 0.7699999999999999, 0.41000000000000003, 0.13, 0.21400000000000002, 0.13, 0.93, 1, 0.13, 0.53, 0.2,
+  0.07, 0.03, 0.35, 0.29, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0.03, 0.21,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0.21000000000000002, 0.09, 0.4, 0.35, 0.7799999999999999, 0.21, 0.238, 0.21, 0.24000000000000002, 0.2, 0.21, 0.5700000000000001, 1
+), nrow = 13, byrow = TRUE,
+  dimnames = list(species_params2$species, species_params2$species) )
+
+knitr::kable(inter, caption = "species' interactions")
+
+# Convert the interaction matrix to a data frame
+sp_2_inter_df <- as.data.frame(inter)
+
+# Ensure row names are preserved as a column (optional)
+sp_2_inter_df$Predator <- rownames(sp_2_inter_df)
+
+
+
+```
+
+
+#setting +/- 10% change with important parameters------
+
+```{r}
+
+#from Benoit's study - these are the 10 most important parameters according to the morris test. They are species specific. i.e. k_vb.1 = commmon shiner von bert growth coefficient. Since we didn't run the morris test - lets just test all species k_vb value.
+
+# Xb <- data.frame(k_vb.6=runif(m,min=0.1818, max = 0.2222), w_inf.4 = runif(m,min=10023.99, max = 12251.55), k_vb.1 = runif(m, min = 0.5184, max = 0.6336),
+#                  k_vb.5 = runif(m, min = 0.39474, max = 0.48246), w_inf.1 = runif(m, min = 36.9, max = 45.1), R_max.5 = runif(m, min = 3.428205, max = 4.190028),
+#                  w_inf.6 = runif(m, min = 1927.233, max = 2355.507), w_inf.2 = runif(m, min = 636.5232, max = 777.9728), k_vb.4 = runif(m, min = 0.0918, max = 0.1122),
+#                  w_inf.5 = runif(m, min = 36.9, max = 45.1))
+
+
+
+# Number of samples for each parameter (choose an appropriate number, e.g., m = 1000)
+m <- 100 #start with 100 but need more... 
+
+# Create a data frame with random values for `k_vb` altered by ±10% for each species
+Xb <- data.frame(
+  k_vb.1 = runif(m, min = 0.9 * species_params2$k_vb[1], max = 1.1 * species_params2$k_vb[1]),
+  k_vb.2 = runif(m, min = 0.9 * species_params2$k_vb[2], max = 1.1 * species_params2$k_vb[2]),
+  k_vb.3 = runif(m, min = 0.9 * species_params2$k_vb[3], max = 1.1 * species_params2$k_vb[3]),
+  k_vb.4 = runif(m, min = 0.9 * species_params2$k_vb[4], max = 1.1 * species_params2$k_vb[4]),
+  k_vb.5 = runif(m, min = 0.9 * species_params2$k_vb[5], max = 1.1 * species_params2$k_vb[5]),
+  k_vb.6 = runif(m, min = 0.9 * species_params2$k_vb[6], max = 1.1 * species_params2$k_vb[6]),
+  k_vb.7 = runif(m, min = 0.9 * species_params2$k_vb[7], max = 1.1 * species_params2$k_vb[7]),
+  k_vb.8 = runif(m, min = 0.9 * species_params2$k_vb[8], max = 1.1 * species_params2$k_vb[8]),
+  k_vb.9 = runif(m, min = 0.9 * species_params2$k_vb[9], max = 1.1 * species_params2$k_vb[9]),
+  k_vb.10 = runif(m, min = 0.9 * species_params2$k_vb[10], max = 1.1 * species_params2$k_vb[10]),
+  k_vb.11 = runif(m, min = 0.9 * species_params2$k_vb[11], max = 1.1 * species_params2$k_vb[11]),
+  k_vb.12 = runif(m, min = 0.9 * species_params2$k_vb[12], max = 1.1 * species_params2$k_vb[12]),
+  k_vb.13 = runif(m, min = 0.9 * species_params2$k_vb[13], max = 1.1 * species_params2$k_vb[13])
+)
+
+# View the generated data frame
+head(Xb)
+
+
+
+```
+
+```{r}
+runsobol <- function(k_vb.1, k_vb.2, k_vb.3, k_vb.4, k_vb.5, k_vb.6, k_vb.7, k_vb.8, k_vb.9, k_vb.10, k_vb.11, k_vb.12, k_vb.13) {
+  # Assign the new `k_vb` values to each species in `species_params2`
+  species_params2$k_vb[1] <- k_vb.1
+  species_params2$k_vb[2] <- k_vb.2
+  species_params2$k_vb[3] <- k_vb.3
+  species_params2$k_vb[4] <- k_vb.4
+  species_params2$k_vb[5] <- k_vb.5
+  species_params2$k_vb[6] <- k_vb.6
+  species_params2$k_vb[7] <- k_vb.7
+  species_params2$k_vb[8] <- k_vb.8
+  species_params2$k_vb[9] <- k_vb.9
+  species_params2$k_vb[10] <- k_vb.10
+  species_params2$k_vb[11] <- k_vb.11
+  species_params2$k_vb[12] <- k_vb.12
+  species_params2$k_vb[13] <- k_vb.13
+  
+  print(species_params2$k_vb)
+  
+  # Create MizerParams object with the updated `species_params2`
+ # params <- newMultispeciesParams(species_params = species_params2, interaction = inter, kappa = 10, w_pp_cutoff = 2)
+  
+  params <- newMultispeciesParams(species_params = species_params2, interaction = inter, w_pp_cutoff = 2) # run without kappa to start
+  print(params)
+  
+  # Run the simulation
+  sim <- project(params, effort = 0, t_max = 5, dt = 0.1, t_save = 1) #changed t_max to run for 5 years to speed up analysis
+  
+  # Extract and return the community slope at the final timestep
+  output <- getCommunitySlope(sim)[5, , ]$slope
+  print(output)
+  return(output)
+}
+
+
+
+```
+
+
+```{r}
+runsobol2 <- function(X) {
+  out <- matrix(nrow = nrow(X), ncol = 1, NA)
+  for (i in 1:nrow(X)) {
+    out[i, ] <- runsobol(X$k_vb.1[i], X$k_vb.2[i], X$k_vb.3[i], X$k_vb.4[i], X$k_vb.5[i],
+                         X$k_vb.6[i], X$k_vb.7[i], X$k_vb.8[i], X$k_vb.9[i], X$k_vb.10[i],
+                         X$k_vb.11[i], X$k_vb.12[i], X$k_vb.13[i])
+  }
+  out <- as.data.frame(out)
+  return(out)
+}
+
+```
+
+
+```{r}
+seq.sobol <- multisensi(design = sobol2007, model = runsobol2,
+                        reduction = NULL, analysis = analysis.sensitivity, center = TRUE,
+                        design.args = list(X1 = Xb[1:(m/2), ], X2 = Xb[(1 + m/2):m, ], nboot = 10), #changed nboot to 10 to speed up analysis
+                        analysis.args = list(keep.outputs = FALSE))
+
+```
+
+
+#Troubleshooting
+
+
+```{r}
+#1. check output from runsobol2 function:
+
+runsobol2 <- function(X) {
+  out <- matrix(nrow = nrow(X), ncol = 1, NA)
+  for (i in 1:nrow(X)) {
+    out[i, ] <- runsobol(X$k_vb.1[i], X$k_vb.2[i], X$k_vb.3[i], X$k_vb.4[i], X$k_vb.5[i],
+                         X$k_vb.6[i], X$k_vb.7[i], X$k_vb.8[i], X$k_vb.9[i], X$k_vb.10[i],
+                         X$k_vb.11[i], X$k_vb.12[i], X$k_vb.13[i])
+    print(out[i, ]) # Debugging output
+  }
+  out <- as.data.frame(out)
+  return(out)
+}
+
+```
+
+
+

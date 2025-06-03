@@ -1,0 +1,110 @@
+---
+title: "07.1_sensitivity_communityslope"
+output: html_document
+date: "2025-01-14"
+---
+
+
+
+
+```{r}
+library(multisensi)
+library(sensitivity)
+library(mizer)
+library(parallel)
+
+# Clear memory
+rm(list = ls())
+
+# Load Mizer details
+species_params2 <- readRDS("tuned_params DVM2.rds")
+species_params2 <- as.data.frame(species_params2@species_params)
+
+# Full Interaction Matrix
+inter <- matrix(c(
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0.6700000000000002, 0.55, 1, 0.8900000000000001, 0, 0, 0, 0, 0, 0.66, 0.35, 0.65, 0.4,
+  0.78, 0.6599999999999999, 0.8900000000000001, 1, 0, 0, 0, 0, 0, 0.7699999999999999, 0.29, 0.6000000000000001, 0.35,
+  0.42, 0.30000000000000004, 0.62, 0.57, 0.9999999999999999, 0.22, 0.304, 0.22, 0.45, 0.41000000000000003, 0.22, 0.78, 0.7799999999999999,
+  0.07, 0.03, 0.35, 0.29, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0.03, 0.21,
+  0.15400000000000003, 0.114, 0.434, 0.374, 0.304, 0.916, 1, 0.916, 0.28400000000000003, 0.21400000000000002, 0.916, 0.114, 0.238,
+  0.07, 0.03, 0.35, 0.29, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0.03, 0.21,
+  0.8700000000000001, 0.8300000000000001, 0.7, 0.81, 0.45, 0.2, 0.28400000000000003, 0.2, 1, 0.93, 0.2, 0.5, 0.24000000000000002,
+  0.9300000000000002, 0.8900000000000001, 0.66, 0.7699999999999999, 0.41000000000000003, 0.13, 0.21400000000000002, 0.13, 0.93, 1, 0.13, 0.53, 0.2,
+  0.07, 0.03, 0.35, 0.29, 0.22, 1, 0.916, 1, 0.2, 0.13, 1, 0.03, 0.21,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0.21000000000000002, 0.09, 0.4, 0.35, 0.7799999999999999, 0.21, 0.238, 0.21, 0.24000000000000002, 0.2, 0.21, 0.5700000000000001, 1
+), nrow = 13, byrow = TRUE, dimnames = list(species_params2$species, species_params2$species))
+
+# Parameter variation (±10% for `w_inf`)
+m <- 50  # Start with 50 samples
+Xb <- as.data.frame(sapply(1:13, function(i) {
+  runif(m, min = 0.9 * species_params2$w_inf[i], max = 1.1 * species_params2$w_inf[i])
+}))
+colnames(Xb) <- paste0("w_inf.", 1:13)
+
+# Pre-calculate base MizerParams object
+base_params <- newMultispeciesParams(
+  species_params = species_params2,
+  interaction = inter,
+  w_pp_cutoff = 2
+)
+
+# Function to run the model with altered `w_inf`
+runsobol <- function(w_inf_values) {
+  # Update `w_inf` values
+  species_params2$w_inf <- w_inf_values
+  
+  # Debugging: Print the updated `w_inf` values
+  print(species_params2$w_inf)
+  
+  # Update MizerParams object
+  params <- base_params
+  params@species_params$w_inf <- w_inf_values
+  
+  # Run the simulation
+  sim <- project(params, effort = 0, t_max = 50, dt = 0.1, t_save = 1)  # Extended simulation time
+  
+  # Extract and return the community slope
+  slope <- tail(getCommunitySlope(sim)$slope, 1)
+  print(slope)  # Debugging: Print the output
+  return(slope)
+}
+
+# Parallelized function for sensitivity analysis
+runsobol_parallel <- function(X) {
+  cl <- makeCluster(detectCores() - 1)  # Use all but one core
+  on.exit(stopCluster(cl))  # Ensure the cluster is stopped even if the function exits unexpectedly
+  clusterEvalQ(cl, library(mizer))  # Load the mizer package on all nodes
+  clusterExport(
+    cl, 
+    varlist = c("species_params2", "base_params", "project", "getCommunitySlope", "runsobol"), 
+    envir = environment()
+  )
+  slopes <- parApply(cl, X, 1, runsobol)
+  return(slopes)
+}
+
+# Test a few samples of `Xb` sequentially
+for (i in 1:5) {
+  print(Xb[i, ])  # Print parameter values
+  print(runsobol(as.numeric(Xb[i, ])))  # Run model and print output
+}
+
+# Run Sobol sensitivity analysis
+seq.sobol <- multisensi(
+  design = sobol2007, 
+  model = runsobol_parallel,
+  reduction = NULL, 
+  analysis = analysis.sensitivity, 
+  center = TRUE,
+  design.args = list(X1 = Xb[1:(m/2), ], X2 = Xb[(1 + m/2):m, ], nboot = 10),
+  analysis.args = list(keep.outputs = FALSE)
+)
+
+# View results
+print(seq.sobol)
+
+```
+

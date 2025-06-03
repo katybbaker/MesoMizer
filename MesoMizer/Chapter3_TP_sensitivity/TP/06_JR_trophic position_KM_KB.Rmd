@@ -1,0 +1,385 @@
+
+
+#code by Jon Reum
+
+
+
+```{r}
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(reshape2)
+# remotes::install_github("gustavdelius/mizerShelf")
+library(mizerShelf)
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/therMizer")
+library(therMizer)
+#install.packages("sensobol")
+library(sensobol)
+library(sensitivity)
+library(dietr)
+
+ 
+ rm(list =ls()) # clear memory
+ 
+```
+
+```{r}
+#params <- readRDS("tuned_params_v3.rds")
+
+params <- readRDS("tuned_params DVM2.rds")
+```
+
+
+
+
+#Function to get a 4-d diet array from mizer models
+
+```{r}
+getDietComp <- function (params,
+                         n = initialN(params),
+                         n_pp = initialNResource(params),
+                         
+                         n_other = initialNOther(params),
+                         proportion = TRUE) # so this means the values are % of diet not g?
+  
+{
+  params <- validParams(params)
+  pred_kernel(params) <- pred_kernel(params) #required to make this work
+  species <- params@species_params$species
+  no_sp <- length(species)
+  no_w <- length(params@w)
+  no_w_full <- length(params@w_full)
+  no_other <- length(params@other_encounter)
+  other_names <- names(params@other_encounter)
+  assertthat::assert_that(identical(dim(n), c(no_sp, no_w)), length(n_pp) ==
+                            
+                            no_w_full)
+  
+  n_tot <- sweep(n, 2, params@w * params@dw, "*")
+  
+  diet_comp <- array(
+    0,
+    dim = c(dim(n_tot), no_sp + 1, no_w_full),
+    
+    dimnames = list(
+      "Predator" = species,
+      
+      "wPredator" = params@w,
+      
+      "Prey" = c(as.character(species), "Resource"),
+      #, other_names),
+      
+      "wPrey" = params@w_full
+    )
+  )
+  
+  idx_sp <- (no_w_full - no_w + 1):no_w_full
+  
+  # if (!is.null(comment(params@pred_kernel))) {
+  
+  ## code to keep prey size | works only without other backgrounds now
+  
+  for (iPredator in 1:dim(diet_comp)[1])
+    
+  {
+    for (wPredator in 1:dim(diet_comp)[2])
+      
+    {
+      for (iPrey in 1:no_sp)
+        
+      {
+        for (wPrey in 1:no_w)
+          # assuming that w is the tail of w_full, won't work if w_full gets larger than w
+          
+        {
+          diet_comp[iPredator, wPredator, iPrey, wPrey] <- params@pred_kernel[iPredator, wPredator, (idx_sp[wPrey])] *
+            
+            n_tot[iPrey, wPrey]
+          
+        }
+        
+      }
+      
+    }
+    
+  }
+  
+  diet_comp[, , no_sp + 1, ] <- sweep(params@pred_kernel,
+                                      
+                                      3,
+                                      params@dw_full * params@w_full * n_pp,
+                                      "*")
+  
+  inter <- cbind(params@interaction,
+                 params@species_params$interaction_resource)
+  
+  diet_comp[, , 1:(no_sp + 1), ] <- sweep(sweep(diet_comp[, , 1:(no_sp + 1), , drop = FALSE], c(1, 3), inter, "*"),
+                                          c(1, 2),
+                                          params@search_vol,
+                                          "*")
+  
+  for (i in seq_along(params@other_encounter)) {
+    diet_comp[, , no_sp + 1 + i, ] <- do.call(
+      params@other_encounter[[i]],
+      
+      list(
+        params = params,
+        n = n,
+        n_pp = n_pp,
+        n_other = n_other,
+        
+        component = names(params@other_encounter)[[i]]
+      )
+    )
+    
+  }
+  
+  f <- getFeedingLevel(params, n, n_pp)
+  
+  fish_mask <- n > 0
+  
+  diet_comp <- sweep(diet_comp, c(1, 2), (1 - f) * fish_mask, "*")
+  
+  if (proportion) {
+    total <- rowSums(diet_comp, dims = 2)
+    
+    diet_comp <- sweep(diet_comp, c(1, 2), total, "/")
+    
+    diet_comp[is.nan(diet_comp)] <- 0
+    
+  }
+  
+  return(diet_comp)
+  
+}
+
+
+```
+
+```{r}
+diet_4d <- getDietComp(params) #4D array = predator, predator size, prey, prey size, diet (g)
+
+df_diet4d <- melt(diet_4d) #create df to make it easier to visualise
+
+
+dim(diet_4d) #13 predators with 100 sizes and 14 prey with 282 sizes - need to add resource to "predator". In this case resource predator will have all prey size classes = 0
+
+```
+# add resource to "predator"
+```{r}
+
+# The dimensions diet_4d are: predators (13), predator size classes (100), prey (14), prey size classes (260)
+
+# Create a new array with an additional predator
+updated_diet_4d <- array(0, dim = c(14, 100, 14, 282))
+
+# Copy the original diet composition data
+updated_diet_4d[1:13, , , ] <- diet_4d
+
+# Resource as predator: all prey values are zero
+# No need to add values as updated_diet_4d is initialized with zeros
+
+# Retain dimension names, including wPredator and wPrey
+dimnames(updated_diet_4d) <- list(
+  Predator = c(dimnames(diet_4d)$Predator, "Resource"),  # Add "Resource" as an additional predator
+  wPredator = dimnames(diet_4d)$wPredator,               # Preserve original predator size classes
+  Prey = dimnames(diet_4d)$Prey,                         # Keep original prey names
+  wPrey = dimnames(diet_4d)$wPrey                        # Preserve original prey size classes
+)
+
+dim(updated_diet_4d)
+
+df_updated_diet_4d <- melt(updated_diet_4d)
+
+
+```
+
+```{r}
+
+# Set the trophic level of the background resource
+zoopTL <- 1.3  # Background resource trophic level - we need to split the resource into size classes. 
+
+# Initialize a matrix to store trophic levels by predator and predator size (wPredator)
+tlsum <- matrix(0, nrow = dim(updated_diet_4d)[1], ncol = dim(updated_diet_4d)[2])
+dimnames(tlsum) <- list(Predator = dimnames(updated_diet_4d)$Predator, wPredator = dimnames(updated_diet_4d)$wPredator)
+
+df_tlsum <- melt(tlsum)
+
+# Set initial trophic level for the background resource
+tlsum[dimnames(tlsum)$Predator == "Resource", ] <- zoopTL
+
+
+```
+
+
+
+```{r}
+# Loop over each predator and size class to calculate trophic levels
+for (i in 1:length(dimnames(updated_diet_4d)$wPredator)) {  # Predator size classes
+  for (j in 1:length(dimnames(updated_diet_4d)$Predator)) {  # Predator species
+    if (dimnames(updated_diet_4d)$Predator[j] != "Resource") {  # Skip Resource as a predator
+      
+      # Retrieve diet composition for predator[j] at size class[i] across all prey and prey sizes
+      diet_weights <- updated_diet_4d[dimnames(updated_diet_4d)$Predator[j], 
+                                      dimnames(updated_diet_4d)$wPredator[i], , ]
+
+      # Flatten diet_weights to a vector
+      diet_weights <- as.vector(diet_weights)
+      
+      # Set up prey trophic levels as a vector, with zoopTL for the resource
+      prey_trophic_levels <- rep(zoopTL, length(diet_weights))
+
+      # Apply prey-specific trophic levels from tlsum for non-Resource prey
+      for (k in 1:length(dimnames(updated_diet_4d)$Prey)) {
+        if (dimnames(updated_diet_4d)$Prey[k] != "Resource") {
+          prey_trophic_levels[(k - 1) * length(dimnames(updated_diet_4d)$wPrey) + 1:k] <- 
+            tlsum[dimnames(updated_diet_4d)$Prey[k], ]
+        }
+      }
+
+      # Calculate trophic level: 1 + weighted mean of prey trophic levels
+      tl <- 1 + weighted.mean(prey_trophic_levels, diet_weights)
+      tlsum[dimnames(updated_diet_4d)$Predator[j], dimnames(updated_diet_4d)$wPredator[i]] <- tl
+    }
+  }
+}
+
+# Convert the trophic level matrix to a data frame for analysis
+tldat <- as.data.frame(as.table(tlsum))
+colnames(tldat) <- c("Predator", "wPredator", "trophic_level")
+
+# Display the results
+tldat
+```
+
+```{r}
+ggplot(tldat, aes(x = as.numeric(wPredator), y = trophic_level, color = Predator, group = Predator)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Trophic Level by Predator Size Class",
+       x = "Predator Size Class (wPredator)", y = "Trophic Level") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+```
+
+
+
+```{r}
+ggplot(tldat, aes(x = Predator, y = trophic_level)) +
+  geom_boxplot(aes(fill = Predator)) +
+  labs(title = "Distribution of Trophic Levels Across Predator Species",
+       x = "Predator Species", y = "Trophic Level") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_viridis_d()
+
+```
+
+#compare to SIA results
+
+```{r}
+SIA_TP <- read.csv("POM_meandata.csv")
+# Remove all '.' from the Species column in the SIA_TP dataframe
+SIA_TP$Species <- gsub("\\.", "", SIA_TP$Species)
+# Correct the species name in the trophic_positions_by_size dataframe
+SIA_TP$Species <- gsub("Nannobranchium achirus", "Nannobrachium achirus", SIA_TP$Species)
+
+
+
+# Prepare the stable isotope data
+SIA_TP_clean <- SIA_TP %>%
+  rename(trophic_level= TP) %>% # Make column names consistent
+  select(Species, trophic_level) # Select relevant columns
+
+# Add a column to distinguish the data sources
+tldat$DataSource <- "Modeled"
+SIA_TP_clean$DataSource <- "Stable Isotope"
+
+tldat <- tldat %>% 
+  rename(Species = Predator)
+
+
+# Combine the two datasets
+combined_TP <- bind_rows(tldat, SIA_TP_clean)
+
+# Manually set the order of the species
+species_order <- c(
+  "Pyrosoma atlanticum", "Euphausia similis", "Thysannoessa macura",  "Themisto spp", "Sergestes spp", "Chaetognath",
+  "Cranchidae","Gymnosomata", "Atolla wyvillei", 
+  "Nannobrachium achirus", "Lampanyctus australis", "Bathylagus spp", "Cyclothone spp"
+)
+
+# Reorder the Species factor based on the specified order
+combined_TP$Species <- factor(combined_TP$Species, levels = species_order)
+
+# Create the combined boxplot
+combined_plot <- ggplot(combined_TP, aes(x = Species, y = trophic_level, fill = DataSource)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) + # Dodge to separate boxes
+  labs(x = "Species", y = "Trophic Position", title = "Comparison of Trophic Position by Species") +
+  theme_minimal() + # Apply a minimal theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # Rotate x-axis labels
+  ylim(1, 4) + # Set y-axis limits to 1-4
+  scale_fill_manual(values = c("Modeled" = "skyblue", "Stable Isotope" = "orange")) # Optional: Set custom colors
+
+# Display the plot
+print(combined_plot)
+
+ggsave("modeled_v_SIA.png", plot = combined_plot)
+
+combined_plot
+
+
+
+```
+#compare model results with model apriori results
+
+```{r}
+TP_modeled_apriori <- read.csv("TP_modeled_apriori.csv")
+TP_modeled_apriori <- TP_modeled_apriori %>% 
+  rename(trophic_level= TrophicPosition) %>% 
+  rename(wPredator = Size)
+ 
+TP_modeled_apriori <- TP_modeled_apriori %>% 
+  select(-1)
+
+
+# Convert `wPredator` in both dataframes to double
+tldat$wPredator <- as.numeric(as.character(tldat$wPredator))
+TP_modeled_apriori$wPredator <- as.numeric(as.character(TP_modeled_apriori$wPredator))
+
+# Now bind the rows
+combined_TP <- dplyr::bind_rows(tldat, TP_modeled_apriori, SIA_TP_clean)
+
+
+
+# Manually set the order of the species
+species_order <- c(
+  "Pyrosoma atlanticum", "Euphausia similis", "Thysannoessa macura",  "Themisto spp", "Sergestes spp", "Chaetognath",
+  "Cranchidae","Gymnosomata", "Atolla wyvillei", 
+  "Nannobrachium achirus", "Lampanyctus australis", "Bathylagus spp", "Cyclothone spp"
+)
+
+# Reorder the Species factor based on the specified order
+combined_TP$Species <- factor(combined_TP$Species, levels = species_order)
+
+# Create the combined boxplot
+combined_plot <- ggplot(combined_TP, aes(x = Species, y = trophic_level, fill = DataSource)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) + # Dodge to separate boxes
+  labs(x = "Species", y = "Trophic Position", title = "Comparison of Trophic Position by Species") +
+  theme_minimal() + # Apply a minimal theme
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + # Rotate x-axis labels
+  ylim(1, 4) + # Set y-axis limits to 1-4
+  scale_fill_manual(values = c("Modeled" = "skyblue", "Modeled_apriori" = "orange", "Stable Isotope" = "lightgreen")) # Optional: Set custom colors
+
+# Display the plot
+print(combined_plot)
+
+ggsave("TP_comparision.png", plot = combined_plot)
+
+```
+

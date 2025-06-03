@@ -1,0 +1,158 @@
+---
+title: "6.3 trophic positions"
+output: html_document
+date: "2024-10-21"
+---
+
+```{r}
+
+library(mizerExperimental)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(reshape2)
+# remotes::install_github("gustavdelius/mizerShelf")
+library(mizerShelf)
+#install.packages("remotes")
+#remotes::install_github("sizespectrum/therMizer")
+library(therMizer)
+#install.packages("sensobol")
+library(sensobol)
+library(sensitivity)
+library(dietr)
+
+ 
+ rm(list =ls()) # clear memory
+
+```
+
+
+```{r}
+
+params_v1 <- readRDS("tuned_params_v3.rds")
+
+# Step 1: Project the model
+mod <- project(params_v1)
+
+dietcomp <- getDiet(params_v1, proportion = TRUE) #units = proportion in grams per year
+
+plotDiet(params_v1)
+
+#trophic level of resource set at 1.7 from SIA data. We can set herbivore TL to 2.7 assuming 1 TL higher than resource since they exclusively feed on resource in this model. (i.e. p. atlanticum); can we assign 1 TL higher for E. similis and Tmac, since we know they can eat copepods?
+
+#lets look at TL by size - taking average wont tell us much since they're all very reliant on resource
+
+```
+
+
+```{r}
+
+# Step 1: Set known trophic levels
+known_tl <- c("Resource" = 1.7, "Pyrosoma atlanticum" = 2.7, 
+              "Euphausia similis" = 3.7, "Thysannoessa macura" = 3.7)
+
+# Initialize trophic levels for all prey to a higher value for unknowns
+prey_list <- dimnames(dietcomp)[[3]]
+prey_tl <- setNames(rep(2.5, length(prey_list)), prey_list)
+prey_tl[names(known_tl)] <- known_tl
+
+# Set a threshold for convergence
+threshold <- 0.001
+change <- Inf
+
+# Step 2: Iteratively update the trophic levels
+while (change > threshold) {
+  old_prey_tl <- prey_tl
+  
+  # Loop through each predator and size class to update the trophic levels
+  for (pred_idx in 1:dim(dietcomp)[1]) {
+    for (size_idx in 1:dim(dietcomp)[2]) {
+      # Get the diet composition for the current predator and size
+      diet_vector <- dietcomp[pred_idx, size_idx, ]
+      
+      # Calculate the weighted average trophic level for this predator and size
+      weighted_tl <- 1 + sum(diet_vector * prey_tl, na.rm = TRUE)
+      
+      # Update the trophic level for this predator (use weighted average)
+      predator_name <- dimnames(dietcomp)[[1]][pred_idx]
+      prey_tl[predator_name] <- weighted_tl
+    }
+  }
+  
+  # Calculate the total change in trophic levels for convergence check
+  change <- max(abs(prey_tl - old_prey_tl), na.rm = TRUE)
+}
+
+# The 'prey_tl' vector now contains the converged trophic levels for each species
+
+
+
+```
+
+
+```{r}
+# Example setup
+predators <- c("Euphausia similis", "Thysannoessa macura", "Sergestes spp", "Themisto spp",
+               "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp",
+               "Bathylagus spp", "Cranchidae", "Chaetognath")
+prey <- c("Resource", "Pyrosoma atlanticum", "Euphausia similis", "Thysannoessa macura",
+          "Sergestes spp", "Themisto spp", "Lampanyctus australis", "Nannobrachium achirus",
+          "Cyclothone spp", "Bathylagus spp", "Cranchidae", "Chaetognath")
+size_classes <- 50  # Simplified number of size classes
+
+# Simulate diet composition: predators x size x prey
+set.seed(0)
+diet_comp <- array(runif(length(predators) * size_classes * length(prey)), 
+                   dim = c(length(predators), size_classes, length(prey)),
+                   dimnames = list(predators, NULL, prey))
+diet_comp <- sweep(diet_comp, c(1, 2), rowSums(diet_comp), FUN = "/")
+
+# Known trophic levels
+known_tl <- c("Resource" = 1.7, "Pyrosoma atlanticum" = 2.7, 
+              "Euphausia similis" = 3.7, "Thysannoessa macura" = 3.7)
+
+# Initialize prey trophic levels, starting with known values and defaulting others to 2.5
+prey_tl <- rep(2.5, length(prey))
+names(prey_tl) <- prey
+prey_tl[names(known_tl)] <- known_tl
+
+# Set convergence parameters
+threshold <- 0.001
+change <- Inf
+
+# Iterative calculation of trophic levels
+while (change > threshold) {
+  old_prey_tl <- prey_tl
+  
+  # Update trophic levels based on diet composition
+  for (pred_idx in 1:length(predators)) {
+    predator <- predators[pred_idx]
+    for (size_idx in 1:size_classes) {
+      # Get the diet proportions for this predator and size class
+      diet_vector <- diet_comp[pred_idx, size_idx, ]
+      
+      # Calculate the weighted average trophic level for this predator
+      weighted_tl <- 1 + sum(diet_vector * prey_tl, na.rm = TRUE)
+      
+      # Update the predator's trophic level
+      prey_tl[predator] <- weighted_tl
+    }
+  }
+  
+  # Check convergence
+  change <- max(abs(prey_tl - old_prey_tl), na.rm = TRUE)
+}
+
+# Convert results to a data frame and sort by trophic level
+results_df <- data.frame(Species = names(prey_tl), Trophic_Level = prey_tl)
+results_df <- results_df[order(-results_df$Trophic_Level), ]
+row.names(results_df) <- NULL
+
+# Display the results
+print(results_df)
+
+```
+
+

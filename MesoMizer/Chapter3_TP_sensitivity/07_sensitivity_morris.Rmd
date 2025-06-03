@@ -1,0 +1,458 @@
+---
+title: "07_sensitivity_morris"
+output: html_document
+date: "2024-11-03"
+---
+
+
+
+
+```{r}
+library(multisensi)
+library(sensitivity)
+library(mizer)
+library(dplyr)
+
+
+
+ rm(list =ls()) # clear memory
+```
+
+```{r}
+#Load mizer details
+#species_params2 <- readRDS("tuned_params_v4.rds")
+
+# species_params2<- as.data.frame(species_params2@species_params)
+# 
+# # Remove columns with any NA values from species_params_2
+# species_params2 <- species_params2[, colSums(is.na(species_params2)) == 0]
+# 
+# 
+# # View the resulting data frame
+# head(species_params2)
+
+
+```
+
+
+
+```{r}
+#interaction matrix
+inter <- read.csv("sp_1_interactions.csv", header = TRUE, sep = ",", row.names = NULL, stringsAsFactors = TRUE )
+
+# Create the interaction matrix (example, modify if needed)
+inter <- matrix(c(
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+  1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+), nrow = 13, byrow = TRUE,
+dimnames = list(
+  c("Euphausia similis", "Thysannoessa macura", "Sergestes spp", "Themisto spp", 
+    "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp", 
+    "Bathylagus spp", "Cranchidae", "Chaetognath", "Gymnosomata", 
+    "Pyrosoma atlanticum", "Atolla wyvillei"),
+  c("Euphausia similis", "Thysannoessa macura", "Sergestes spp", "Themisto spp", 
+    "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp", 
+    "Bathylagus spp", "Cranchidae", "Chaetognath", "Gymnosomata", 
+    "Pyrosoma atlanticum", "Atolla wyvillei")
+))
+
+# Convert the matrix to numeric
+inter <- apply(inter, 2, as.numeric)
+
+# Confirm that the matrix is numeric
+str(inter)
+
+
+
+```
+
+
+```{r}
+# Load the Mizer object
+species_params2 <- readRDS("tuned_params_v4.rds")  # Load the Mizer object with species interactions
+
+
+# Check structure of species_params2@species_params to understand row count and size handling
+print("Structure of species_params2@species_params:")
+print(str(species_params2@species_params))
+
+# Prepare the data and parameters
+# Convert character columns to numeric and handle size classes if present
+species_params_clean <- species_params2@species_params %>%
+  mutate(across(-species, ~ as.numeric(.))) %>%  # Convert all columns except 'species' to numeric
+  dplyr::select_if(~ !any(is.na(.)))  # Remove columns with any NAs
+
+# Identify columns that cause coercion issues
+non_numeric_columns <- colnames(species_params2@species_params)[
+  sapply(species_params2@species_params, function(col) any(is.na(as.numeric(col)) & !is.na(col)))
+]
+
+print("Columns causing coercion issues:")
+print(non_numeric_columns)
+
+
+# Convert columns to numeric while excluding non-numeric columns
+species_params_clean <- species_params2@species_params %>%
+  mutate(across(where(is.character) & -species, ~ as.numeric(.))) %>%  # Convert character columns to numeric
+  dplyr::select_if(~ !any(is.na(.)))  # Remove columns with any NAs
+
+# Print columns that were excluded
+print("Columns excluded due to coercion to NAs:")
+print(non_numeric_columns)
+
+
+
+parameters <- colnames(species_params_clean)[-1]  # Extract parameter names excluding 'species'
+
+# Create a matrix of input parameters for Morris, ensuring it matches the structure needed
+X <- as.matrix(species_params_clean[, parameters])
+
+# Debugging: Print dimensions of X and species_params2@species_params
+print(paste("Number of rows in X:", nrow(X)))
+print(paste("Number of rows in species_params2@species_params:", nrow(species_params2@species_params)))
+
+# Ensure that X has the correct number of rows and is aligned properly
+if (nrow(X) != nrow(species_params2@species_params)) {
+  stop("Mismatch in the number of rows between input matrix and species_params.")
+}
+# 
+# # Run Morris analysis
+# morris_results <- morris(model = function(X) {
+#   params_temp <- species_params2
+#   
+#   # Update only the matching columns in params_temp@species_params
+#   for (param in parameters) {
+#     if (param %in% colnames(params_temp@species_params)) {
+#       params_temp@species_params[[param]] <- X[, param]
+#     }
+#   }
+#   
+#   # Run the model and extract the community slope
+#   model_output <- project(params_temp)
+#   community_slope <- sum(getCommunitySlope(model_output))
+#   return(community_slope)
+# }, 
+# factors = parameters,  # Parameter names
+# r = 10,  # Number of trajectories
+# design = list(type = "oat", levels = 10, grid.jump = 2))
+# 
+# # Extract mean absolute elementary effects
+# ee_means <- apply(morris_results$ee, 2, function(x) mean(abs(x), na.rm = TRUE))
+# 
+# # Get the top 10 most influential parameters based on mean EE
+# top_10_parameters <- sort(ee_means, decreasing = TRUE)[1:10]
+# 
+# # Print the top 10 parameters
+# print(top_10_parameters)
+```
+
+
+
+
+```{r}
+# community_slope_function <- function(params) {
+#   # Set up the Mizer model parameters with the input vector
+#   params_v1_modified <- species_params2  # Start with a copy of the existing model
+#   
+#   # Adjust the parameters based on input
+#   param_names <- colnames(param_ranges)
+#   for (i in seq_along(param_names)) {
+#     params_v1_modified@species_params[[param_names[i]]] <- params[i]
+#   }
+#   
+#   # Run the model
+#   mod <- project(params_v1_modified)
+#   
+#   # Extract the desired output, e.g., total biomass at the final timestep
+#   Community_slope <- sum(getCommunitySlope(mod)[, ncol(getCommunitySlope(mod))])
+#   
+#   return(Community_slope)  # Change this to the output metric you need
+# }
+
+```
+
+
+```{r}
+# Extract species_params as a data frame for modification
+species_params_df <- as.data.frame(species_params2@species_params)
+# 
+# # Custom function to update parameters based on a vector input and run the model
+# run_morris_model <- function(params_vec) {
+#   # Debug: Print the input vector
+#   print("Input parameter vector:")
+#   print(params_vec)
+# 
+#   # Assign the vector values to the respective species-specific parameters in the data frame
+#   species_params_df$k_vb[species_params_df$species == "Euphausia similis"] <- params_vec[1]
+#   species_params_df$w_inf[species_params_df$species == "Thysannoessa macura"] <- params_vec[2]
+#   species_params_df$k_vb[species_params_df$species == "Sergestes spp"] <- params_vec[3]
+#   species_params_df$k_vb[species_params_df$species == "Themisto spp"] <- params_vec[4]
+#   species_params_df$w_inf[species_params_df$species == "Lampanyctus australis"] <- params_vec[5]
+#   species_params_df$R_max[species_params_df$species == "Nannobrachium achirus"] <- params_vec[6]
+#   species_params_df$w_inf[species_params_df$species == "Cyclothone spp"] <- params_vec[7]
+#   species_params_df$w_inf[species_params_df$species == "Bathylagus spp"] <- params_vec[8]
+#   species_params_df$k_vb[species_params_df$species == "Cranchidae"] <- params_vec[9]
+#   species_params_df$w_inf[species_params_df$species == "Chaetognath"] <- params_vec[10]
+#   
+#   species_params_df$h[species_params_df$species == "Euphausia similis"] <- params_vec[11]
+#   species_params_df$ks[species_params_df$species == "Thysannoessa macura"] <- params_vec[12]
+#   species_params_df$beta[species_params_df$species == "Sergestes spp"] <- params_vec[13]
+#   species_params_df$gamma[species_params_df$species == "Themisto spp"] <- params_vec[14]
+#   species_params_df$R_max[species_params_df$species == "Lampanyctus australis"] <- params_vec[15]
+# 
+#   # Debug: Print the modified data frame
+#   print("Modified species_params_df:")
+#   print(head(species_params_df))
+# 
+#   # Create a new MizerParams object with the updated parameters
+#   params <- MizerParams(species_params = species_params_df, interaction = inter, kappa = 10, w_pp_cutoff = 2)
+#   
+#   # Run the model and check for errors in model execution
+#   sim <- project(params, effort = 0, t_max = 500, dt = 0.1, t_save = 1)
+#   
+#   # Check if the output is valid
+#   if (is.null(sim)) {
+#     print("Model output is NULL")
+#     return(NA)
+#   }
+# 
+#   # Extract and return the community slope at the final timestep
+#   output <- getCommunitySlope(sim)[500, , ]$slope
+#   print("Output community slope:")
+#   print(output)
+#   return(output)
+# }
+# 
+# 
+# # Define the parameter names for the analysis
+# parameters <- c("k_vb_Esimilis", "w_inf_Tmacura", "k_vb_Sspp", "k_vb_Themisto", 
+#                 "w_inf_Laustralis", "R_max_Nachirus", "w_inf_Cyclothone", 
+#                 "w_inf_Bspp", "k_vb_Cranchidae", "w_inf_Chaetognath", 
+#                 "h_Esimilis", "ks_Tmacura", "beta_Sspp", "gamma_Themisto", 
+#                 "R_max_Laustralis")
+# # 
+# # # Run the Morris analysis
+# # morris_results <- morris(
+# #   model = run_morris_model,
+# #   factors = parameters,
+# #   r = 10,  # Number of trajectories (can be increased for higher accuracy)
+# #   design = list(type = "oat", levels = 10, grid.jump = 2)
+# # )
+# # 
+# # # Analyze and display the results
+# # print(morris_results)
+# # plot(morris_results)
+# # 
+# # # Extract and print the top 10 most influential parameters
+# # ee_means <- apply(morris_results$ee, 2, function(x) mean(abs(x), na.rm = TRUE))
+# # top_10_parameters <- sort(ee_means, decreasing = TRUE)[1:10]
+# # print(top_10_parameters)
+
+```
+```{r}
+run_morris_model <- function(params_vec) {
+  # Assign the vector values to the respective species-specific parameters in the data frame
+  # (Assign values as done previously)
+
+  # Debug: Print the parameter vector being used
+  print("Testing parameter set:")
+  print(params_vec)
+
+  # Check if any parameter is out of a reasonable range before proceeding
+  if (any(is.na(params_vec)) || any(params_vec < 0)) {
+    print("Invalid parameter set detected.")
+    return(NA)
+  }
+
+  # Create the MizerParams object
+  params <- tryCatch({
+    MizerParams(species_params = species_params_df, interaction = inter, kappa = 10, w_pp_cutoff = 2)
+  }, error = function(e) {
+    print("Error in creating MizerParams:")
+    print(e)
+    return(NA)
+  })
+
+  # Check if params creation was successful
+  if (is.na(params)) {
+    return(NA)
+  }
+
+  # Run the model and catch any potential errors
+  sim <- tryCatch({
+    project(params, effort = 0, t_max = 500, dt = 0.1, t_save = 1)
+  }, error = function(e) {
+    print("Error during model projection:")
+    print(e)
+    return(NA)
+  })
+
+  # Check if sim is valid
+  if (is.null(sim)) {
+    print("Model output is NULL")
+    return(NA)
+  }
+
+  # Extract and return the community slope at the final timestep
+  output <- getCommunitySlope(sim)[500, , ]$slope
+  if (is.na(output)) {
+    print("Community slope output is NA")
+  }
+  return(output)
+}
+
+
+
+# Define the parameter names for the analysis
+parameters <- c("k_vb_Esimilis", "w_inf_Tmacura", "k_vb_Sspp", "k_vb_Themisto", 
+                "w_inf_Laustralis", "R_max_Nachirus", "w_inf_Cyclothone", 
+                "w_inf_Bspp", "k_vb_Cranchidae", "w_inf_Chaetognath", 
+                "h_Esimilis", "ks_Tmacura", "beta_Sspp", "gamma_Themisto", 
+                "R_max_Laustralis")
+
+# Run the Morris analysis
+morris_results <- morris(
+  model = run_morris_model,
+  factors = parameters,
+  r = 10,  # Number of trajectories (can be increased for higher accuracy)
+  design = list(type = "oat", levels = 10, grid.jump = 2)
+)
+# 
+# # Analyze and display the results
+# print(morris_results)
+# plot(morris_results)
+# 
+# # Extract and print the top 10 most influential parameters
+# ee_means <- apply(morris_results$ee, 2, function(x) mean(abs(x), na.rm = TRUE))
+# top_10_parameters <- sort(ee_means, decreasing = TRUE)[1:10]
+# print(top_10_parameters)
+
+
+```
+```{r}
+run_morris_model <- function(params_vec) {
+  print("Testing parameter set:")
+  print(params_vec)
+
+  # Assign the vector values to the species-specific parameters in the data frame
+  # Ensure valid assignment here
+
+  # Run the model and catch errors
+  tryCatch({
+    params <- newMultispeciesParams(species_params = species_params_df, interaction = inter, kappa = 10, w_pp_cutoff = 2)
+    sim <- project(params, effort = 0, t_max = 100, dt = 0.1, t_save = 1)
+    output <- getCommunitySlope(sim)[100, , ]$slope
+
+    # Check for NA or invalid output
+    if (is.na(output) || !is.finite(output)) {
+      print("Invalid output detected. Returning NA.")
+      return(NA)
+    }
+
+    return(output)
+  }, error = function(e) {
+    print("Error during model execution:")
+    print(e)
+    return(NA)
+  })
+}
+
+```
+
+
+```{r}
+# Function to run the model with adjusted parameters
+run_adjusted_model <- function(base_params, param_name, change_factor) {
+  modified_params <- base_params
+  modified_params[[param_name]] <- modified_params[[param_name]] * change_factor
+  
+  # Run the model
+  params <- MizerParams(species_params = modified_params, interaction = inter, kappa = 10, w_pp_cutoff = 2)
+  sim <- project(params, effort = 0, t_max = 500, dt = 0.1, t_save = 1)
+  output <- getCommunitySlope(sim)[500, , ]$slope
+  
+  return(output)
+}
+
+# Base parameters (original)
+base_params <- species_params_df  # Ensure this is your original species parameter dataframe
+
+# List of parameters to adjust
+param_names <- c("k_vb", "w_inf", "R_max", "h", "ks", "beta", "gamma")
+
+# Store results
+sensitivity_results <- list()
+
+# Run the model for each parameter adjustment
+for (param in param_names) {
+  # Increase by 10%
+  increase_result <- run_adjusted_model(base_params, param, 1.10)
+  
+  # Decrease by 10%
+  decrease_result <- run_adjusted_model(base_params, param, 0.90)
+  
+  # Store the results
+  sensitivity_results[[param]] <- list(
+    increase = increase_result,
+    decrease = decrease_result
+  )
+}
+
+# Print the results for review
+print(sensitivity_results)
+
+```
+
+```{r}
+# Create an empty list to store results
+results_list <- list()
+
+# Loop through each parameter and species to extract results
+for (param in names(sensitivity_results)) {
+  for (species in names(sensitivity_results[[param]])) {
+    results_list[[length(results_list) + 1]] <- data.frame(
+      Parameter = param,
+      Species = species,
+      Change = "Increase 10%",
+      Output = sensitivity_results[[param]][[species]][1]  # Assuming first entry is increase
+    )
+    results_list[[length(results_list) + 1]] <- data.frame(
+      Parameter = param,
+      Species = species,
+      Change = "Decrease 10%",
+      Output = sensitivity_results[[param]][[species]][2]  # Assuming second entry is decrease
+    )
+  }
+}
+
+# Combine list into a data frame
+sensitivity_results_df <- do.call(rbind, results_list)
+
+# Plot using ggplot2
+library(ggplot2)
+
+ggplot(sensitivity_results_df, aes(x = Species, y = Output, fill = Change)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  facet_wrap(~ Parameter, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Sensitivity Analysis: Parameter Adjustments by Species",
+    x = "Species",
+    y = "Model Output (Community Slope)",
+    fill = "Adjustment"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+

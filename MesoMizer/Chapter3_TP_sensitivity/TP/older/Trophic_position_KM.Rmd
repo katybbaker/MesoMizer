@@ -1,0 +1,414 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+```
+
+
+Original code from size structured model to calculate trophic position
+
+Initially setup where dynamic predators and prey are output separately to phytoplankton.
+
+This could be beneficial in mizer, as it will allow the background resource to be treated distinctly and we can assign different baseline values to the background resource.
+
+dim(dynamdiet)
+[1]   4 184   4 184
+
+Dimensions of `dynamdiet` are 4 predator groups, 184 predator sizes, 4 prey groups, 184 prey sizes
+
+dim(phytodiet)
+[1]   4 184
+
+dimensions of `phytodiet` are 4 predator groups, 184 predator sizes and the value contained is the amount of phytoplankton consumed for each predator and each predator size
+
+```{r}
+##### PHYTO DIET DIM1 = SAVE STEP, DIM2 = PRED GROUP, DIM3 = PRED SIZE
+##### DYNAM DIET DIM1 = SAVE STEP, DIM2 = PRED GROUP, DIM3 = PRED SIZE, DIM 4 = PREY GROUP, DIM 5 = PREY SIZE
+
+# Average diet array for each predator size class for the final half of the projection
+dynamdiet = apply(model$dynam_diet_full[c(floor(0.5 * dim(model$dynam_diet_full)[1]):dim(model$dynam_diet_full)[1]), , , , ], c(2, 3, 4, 5), mean)
+phytodiet = apply(model$phyto_diet_full[c(floor(0.5 * dim(model$phyto_diet_full)[1]):dim(model$phyto_diet_full)[1]), , ], c(2, 3), mean)
+
+phyto_tl <- 1 # TL for phytoplankton is 1
+start_dynam_tl <- matrix(2, nrow = dim(dynamdiet)[1], ncol = dim(dynamdiet)[2]) # Start TL for dynamic size groups - start at 2 for all groups and sizes
+
+curr_phyto_diet <- phytodiet # Current phyto diet
+curr_dynam_diet <- dynamdiet # Current heterotroph diet
+
+total_diet <- apply(curr_phyto_diet, c(1, 2), sum) + apply(curr_dynam_diet, c(1, 2), sum) # Total consumption, in grams wet weight, by pred group and pred size
+
+curr_phyto_frac <- apply(sweep(curr_phyto_diet, c(1, 2), total_diet, '/'), c(1, 2), sum) # Fraction of diet from phyto, by pred group and pred sizes
+curr_dynam_frac <- sweep(curr_dynam_diet, c(1, 2), total_diet, '/') # Fraction of diet from each prey group and prey size, for each pred group and pred size
+
+pb = txtProgressBar(
+  min = 0,
+  max = 100,
+  initial = 0,
+  style = 3
+)
+
+for (j in 1:100) {
+  # Gauss-Siedel iterative loop to calculate trophic levels
+  setTxtProgressBar(pb, j)
+  
+  calc_dynam_tl = sweep(curr_dynam_frac, c(3, 4), start_dynam_tl, '*')
+  calc_dynam_tl[which(is.nan(calc_dynam_tl) == TRUE)] = 0 # Get rid of nans - these are entries where there is no biomass for a given group
+  #calc_dynam_tl[which(calc_dynam_tl == Inf)] = 0 # Get rid of infinite values, occurs with asymptotic size bins, because there is no biomass to have a diet in those bins
+  start_dynam_tl = 1 + phyto_tl * curr_phyto_frac + apply(calc_dynam_tl, c(1, 2), sum) # Update trophic level matrix
+} # End Gauss-Siedel loop
+
+# Create long form diet dataframe
+start_dynam_tl <- melt(start_dynam_tl)
+
+# Assign names to all variables in df_diet
+names(start_dynam_tl) <- c("Predator_Species", "Predator_Size_Class", "RTP")
+```
+
+
+Function to get a 4-d diet array from mizer models
+
+```{r}
+getDietComp <- function (params,
+                         n = initialN(params),
+                         n_pp = initialNResource(params),
+                         
+                         n_other = initialNOther(params),
+                         proportion = TRUE)
+  
+{
+  params <- validParams(params)
+  pred_kernel(params) <- pred_kernel(params) #required to make this work
+  species <- params@species_params$species
+  no_sp <- length(species)
+  no_w <- length(params@w)
+  no_w_full <- length(params@w_full)
+  no_other <- length(params@other_encounter)
+  other_names <- names(params@other_encounter)
+  assertthat::assert_that(identical(dim(n), c(no_sp, no_w)), length(n_pp) ==
+                            
+                            no_w_full)
+  
+  n_tot <- sweep(n, 2, params@w * params@dw, "*")
+  
+  diet_comp <- array(
+    0,
+    dim = c(dim(n_tot), no_sp + 1, no_w_full),
+    
+    dimnames = list(
+      "Predator" = species,
+      
+      "wPredator" = params@w,
+      
+      "Prey" = c(as.character(species), "Resource"),
+      #, other_names),
+      
+      "wPrey" = params@w_full
+    )
+  )
+  
+  idx_sp <- (no_w_full - no_w + 1):no_w_full
+  
+  # if (!is.null(comment(params@pred_kernel))) {
+  
+  ## code to keep prey size | works only without other backgrounds now
+  
+  for (iPredator in 1:dim(diet_comp)[1])
+    
+  {
+    for (wPredator in 1:dim(diet_comp)[2])
+      
+    {
+      for (iPrey in 1:no_sp)
+        
+      {
+        for (wPrey in 1:no_w)
+          # assuming that w is the tail of w_full, won't work if w_full gets larger than w
+          
+        {
+          diet_comp[iPredator, wPredator, iPrey, wPrey] <- params@pred_kernel[iPredator, wPredator, (idx_sp[wPrey])] *
+            
+            n_tot[iPrey, wPrey]
+          
+        }
+        
+      }
+      
+    }
+    
+  }
+  
+  diet_comp[, , no_sp + 1, ] <- sweep(params@pred_kernel,
+                                      
+                                      3,
+                                      params@dw_full * params@w_full * n_pp,
+                                      "*")
+  
+  inter <- cbind(params@interaction,
+                 params@species_params$interaction_resource)
+  
+  diet_comp[, , 1:(no_sp + 1), ] <- sweep(sweep(diet_comp[, , 1:(no_sp + 1), , drop = FALSE], c(1, 3), inter, "*"),
+                                          c(1, 2),
+                                          params@search_vol,
+                                          "*")
+  
+  for (i in seq_along(params@other_encounter)) {
+    diet_comp[, , no_sp + 1 + i, ] <- do.call(
+      params@other_encounter[[i]],
+      
+      list(
+        params = params,
+        n = n,
+        n_pp = n_pp,
+        n_other = n_other,
+        
+        component = names(params@other_encounter)[[i]]
+      )
+    )
+    
+  }
+  
+  f <- getFeedingLevel(params, n, n_pp)
+  
+  fish_mask <- n > 0
+  
+  diet_comp <- sweep(diet_comp, c(1, 2), (1 - f) * fish_mask, "*")
+  
+  if (proportion) {
+    total <- rowSums(diet_comp, dims = 2)
+    
+    diet_comp <- sweep(diet_comp, c(1, 2), total, "/")
+    
+    diet_comp[is.nan(diet_comp)] <- 0
+    
+  }
+  
+  return(diet_comp)
+  
+}
+```
+
+
+Load model
+
+```{r}
+params_v1 <- readRDS("~/R Projects/MesoMizer/MesoMizer/tuned_params_v3.rds")
+```
+
+```{r}
+params_v1@w
+
+params_v1@w_full
+```
+
+
+
+```{r}
+plotDiet(params_v1)
+```
+
+
+
+```{r}
+diet_4d <- getDietComp(params_v1)
+
+dim(diet_4d)
+```
+To adapt for Jon's code, we need to: 
+  - add a 'resource' predator to the predator dimension (dimension 1) 
+  - might need to update dimension 2 (predator size) to match the full prey size dimension (260 in this case)
+
+```{r}
+# diet_frac <- getDietComp(params_v1, proportion = T)
+
+df_diet4d <- melt(diet_4d)
+
+head(df_diet4d)
+```
+
+```{r}
+# Create a heatmap using ggplot2
+df_diet4d %>% 
+  group_by(Predator, wPredator, wPrey) %>% 
+  summarise(total_consumption = sum(value)) %>% 
+  ggplot(aes(x = wPrey, y =  wPredator, fill = total_consumption)) +
+  geom_tile() +
+  scale_fill_viridis_c() +  # Use a color palette for the heatmap (optional)
+  labs(x = "Prey size", y = "Predator size", fill = "value") +
+  theme_minimal() +
+  facet_wrap(~Predator) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+glimpse(diet_4d)
+```
+
+Since the background resource is now the 14th prey group, we can separate it similarly to phytodiet in the original code:
+```{r}
+
+phyto_diet <- diet_4d[, , 14, ]  # Background resource as the 14th prey group
+
+df_phyto_diet <- melt(phyto_diet)
+
+head(df_phyto_diet, 20)
+
+dim(phyto_diet)
+```
+
+```{r}
+dynam_diet <- diet_4d[, , 1:13, ]  # Dynamic prey excluding background resource
+
+```
+
+
+Inspect phyto diet
+
+```{r}
+dim(phyto_diet)
+
+glimpse(phyto_diet)
+
+summary(phyto_diet)
+```
+Inspect dynam diet
+```{r}
+dim(dynam_diet)
+
+glimpse(dynam_diet)
+
+summary(dynam_diet)
+```
+
+```{r}
+curr_phyto_diet <- phyto_diet
+curr_dynam_diet <- dynam_diet
+```
+
+
+
+```{r}
+total_diet <- apply(curr_phyto_diet, c(1,2), sum) + apply(curr_dynam_diet, c(1,2), sum)
+```
+
+
+```{r}
+curr_phyto_frac <- apply(sweep(curr_phyto_diet, c(1,2), total_diet, '/'), c(1,2), sum) # Fraction of diet from phyto, by pred group and pred sizes
+curr_dynam_frac <- sweep(curr_dynam_diet, c(1,2), total_diet, '/') # Fraction of diet from each prey group and prey size, for each pred group and pred size
+```
+
+
+```{r}
+# Create a new array with 260 predator sizes, padding the first 160 sizes with zeros
+new_phyto_diet <- matrix(0, nrow = dim(curr_phyto_frac)[1], ncol = 260)
+
+# Place the summed background resource values into the last 100 positions of predator sizes
+new_phyto_diet[, 161:260] <- curr_phyto_frac
+
+# Result: new_phyto_diet has dimensions (13 predator groups, 260 predator sizes)
+
+```
+
+
+
+
+Trophic Level Calculation (Gauss-Seidel Iteration)
+Use the Gauss-Seidel method to calculate the trophic levels iteratively. The initial start_dynam_tl matrix can still begin at a trophic level of 2:
+
+```{r}
+phyto_tl <- 2.3 # TL for background resource, informed by POM SIA results
+
+start_dynam_tl <- matrix(2, nrow = dim(curr_dynam_frac)[1], ncol = dim(curr_dynam_frac)[2]) # Start TL for dynamic size groups - start at 2 for all groups and sizes
+
+# pb = txtProgressBar(min = 0, max = 100, initial = 0, style = 3)
+  
+  for(j in 1:100){ # Gauss-Siedel iterative loop to calculate trophic levels
+    setTxtProgressBar(pb, j)
+    
+    calc_dynam_tl = sweep(curr_dynam_frac, c(3,4), start_dynam_tl, '*')
+    calc_dynam_tl[which(is.nan(calc_dynam_tl) == TRUE)] = 0 # Get rid of nans - these are entrys where there is no biomass for a given group
+    calc_dynam_tl[which(calc_dynam_tl == Inf)] = 0 # Get rid of infinite values, occurs with asymptotic size bins, because there is no biomass to have a diet in those bins
+    start_dynam_tl = 1+phyto_tl*curr_phyto_frac + apply(calc_dynam_tl, c(1,2), sum) # Update trophic level matrix
+  } # End Gauss-Siedel loop
+```
+
+Convert to Long-Form Dataframe
+Finally, convert start_dynam_tl to long-form, which will now reflect the 13 predator groups and 100 predator sizes:
+
+```{r}
+start_dynam_tl_df <- melt(start_dynam_tl)
+names(start_dynam_tl_df) <- c("Predator_Species", "Predator_Size_Class", "RTP")
+
+summary(start_dynam_tl_df)
+```
+
+
+```{r}
+
+# make predators and prey factor variables
+start_dynam_tl_df$Predator_Species <- as.factor(start_dynam_tl_df$Predator_Species)
+
+df_size_classes <- params_v1@dw # Create new object with list of size classes in log10 g
+df_size_classes <- as.data.frame(df_size_classes) # Convert to a dataframe
+names(df_size_classes) <- c("Predator_Size") # Create new name Size for the variable
+df_size_classes$Predator_Size_Class <- 1:length(params_v1@dw)
+
+df_species_predator <- params_v1@species_params$species # Create new object with species names from model
+df_species_predator <- as.data.frame((df_species_predator)) # Convert to a dataframe
+names(df_species_predator) <- c("Predator") # Rename variable
+df_species_predator$Predator_Species <- 1:length(params_v1@species_params$species) # Create new integer variable in ascending order with 'Species'
+df_species_predator$Predator_Species <- as.factor(df_species_predator$Predator_Species) # Convert to factor
+df_species_predator$Predator <- as.factor(df_species_predator$Predator) # Convert to factor
+
+glimpse(df_size_classes)
+glimpse(df_species_predator)
+
+# ## join df_N with df_size_class data in order to create log10 size classes rather then the size     class integer 1:184 that is in df_N
+# df_combined <- left_join(start_dynam_tl_df, df_size_classes, by = "Predator_Size_Class") %>%
+#   
+#   left_join(df_species_predator, by = "Predator_Species") 
+
+## join df_N with df_size_class data in order to create log10 size classes rather then the size     class integer 1:184 that is in df_N
+df_combined <- left_join(start_dynam_tl_df, df_species_predator, by = "Predator_Species") 
+```
+
+
+
+```{r}
+ggplot(data = start_dynam_tl_df, aes(x = Predator_Size_Class, y = RTP, colour = Predator_Species)) +
+  geom_point() +
+  theme_bw() +
+  facet_wrap( ~ Predator_Species, scales = "free") +
+  theme(
+    legend.position = "none"
+  )
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

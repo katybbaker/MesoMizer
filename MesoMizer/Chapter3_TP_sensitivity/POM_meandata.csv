@@ -1,0 +1,88 @@
+"","Site","Species","Group","Length..mm.","WW..g.","Depth","Lipid","Tissue","d13C","d15N","TP"
+"1","SOTS","Themisto spp.","Amphipod",14,0.07,"Epi","y","Whole",-21.39333151,5.27,2.43516339869281
+"2","SOTS","Themisto spp.","Amphipod",12,0.05,"Epi","y","Whole",-21.63034661,4.94,2.3381045751634
+"3","SOTS","Themisto spp.","Amphipod",15,0.08,"Epi","y","Whole",-21.13,5.24,2.42633986928105
+"4","SOTS","Themisto spp.","Amphipod",15,0.08,"Epi","n","Whole",-20.786,5.132,2.39457516339869
+"5","SOTS","Themisto spp.","Amphipod",9,0.01,"Epi","y","Whole",-20.8,4.72,2.27339869281046
+"6","SOTS","Themisto spp.","Amphipod",15,0.08,"Epi","n","Whole",-21.01,5.47,2.49398692810458
+"7","SOTS","Themisto spp.","Amphipod",10,0.01,"Epi","y","Whole",-26.25,1.97,1.46457516339869
+"8","SOTS","Themisto spp.","Amphipod",9,0.01,"Lmeso","y","Whole",-21.60461924,4.17,2.1116339869281
+"9","SOTS","Themisto spp.","Amphipod",6,NA,"Lmeso","y","Whole",-21.70309287,4.4,2.17928104575163
+"10","SOTS","Themisto spp.","Amphipod",6,NA,"Lmeso","y","Whole",-20.44681291,3.81,2.00575163398693
+"11","SOTS","Themisto spp.","Amphipod",5,NA,"Lmeso","y","Whole",-21.36123173,3.77,1.99398692810458
+"12","SOTS","Themisto spp.","Amphipod",8,NA,"Meso","y","Whole",-21.57185303,3.68,1.96751633986928
+"13","SOTS","Themisto spp.","Amphipod",5,NA,"Meso","y","Whole",-22.49208954,3.62,1.94986928104575
+"14","SOTS","Themisto spp.","Amphipod",5,NA,"Meso","y","Whole",-20.81606349,3.54,1.92633986928105
+"15","SOTS","Bathylagus spp.","Fish",53,0.7,"Lmeso","y","Whole",-21.0266666666667,9.17,3.58222222222222
+"16","SOTS","Bathylagus spp.","Fish",32,0.1,"Lmeso","y","Whole",-21.86200806,8.24,3.30869281045752
+"17","SOTS","Bathylagus spp.","Fish",38,0.2,"Lmeso","y","Whole",-23.05971809,7.94333333333333,3.22143790849673
+"18","SOTS","Bathylagus spp.","Fish",35,0.2,"Lmeso","y","Whole",-21.597765995,7.715,3.15428104575163
+"19","SOTS","Cyclothone spp.","Fish",34,2,"Lmeso","y","Whole",-21.51992998,9.02,3.5381045751634
+"20","SOTS","Cyclothone spp.","Fish",22,0.1,"Lmeso","y","Whole",-22.59248183,9.13,3.57045751633987
+"21","SOTS","Cyclothone spp.","Fish",39,0.2,"Lmeso","y","Whole",-22.32183807,7.51,3.09398692810458
+"22","SOTS","Cyclothone spp.","Fish",37,0.2,"Lmeso","n","Whole",-20.368,7.836,3.18986928104575
+"23","SOTS","Cyclothone spp.","Fish",37,0.2,"Lmeso","y","Whole",-22.13343699,8.47,3.37633986928105
+"24","SOTS","Cyclothone spp.","Fish",39,0.1,"Lmeso","y","Whole",-22.72,7.52,3.09692810457516
+"25","SOTS","Cyclothone spp.","Fish",22,0.1,"Lmeso","y","Whole",-22.12,8.91,3.50575163398693
+"26","SOTS","Cyclothone spp.","Fish",35,0.2,"Lmeso","y","Whole",-21.71,8.76,3.4616339869281
+"27","SOTS","Cyclothone spp.","Fish",39,0.2,"Lmeso","y","Whole",-22.01,8.53,3.39398692810457
+"28","SOTS","Cyclothone spp.","Fish",39,0.2,"Lmeso","y","Whole",-22.05,8.74,3.45575163398693
+"29","SOTS","Cyclothone spp.","Fish",39,0.2,"Lmeso","y","Whole",-22.03,8.64,3.42633986928105
+"30","SOTS","Cyclothone spp.","Fish",29,0.1,"Lmeso","y","Whole",-21.73314818,9.1,3.5616339869281
+"31","SOTS","Nannobranchium achirus","Fish",68,2.2,"Lmeso","y","Muscle",-20.45,9.62,3.71457516339869
+"32","SOTS","Nannobranchium achirus","Fish",68,2.2,"Lmeso","y","Muscle",-20.41,9.66,3.72633986928105
+"33","SOTS","Nannobranchium achirus","Fish",68,2.2,"Lmeso","y","Muscle",-20.52,10.1,3.85575163398693
+"34","SOTS","Nannobranchium achirus","Fish",60,1.5,"Lmeso","y","Muscle",-21.45,7.9,3.20869281045752
+"35","SOTS","Nannobranchium achirus","Fish",45,0.6,"Lmeso","y","Muscle",-20.61,9.65,3.72339869281046
+"36","SOTS","Nannobranchium achirus","Fish",64,1.4,"Lmeso","y","Muscle",-20.2,8.54,3.39692810457516
+"37","SOTS","Nannobranchium achirus","Fish",40,0.4,"Lmeso","y","Muscle",-20.31,8.48,3.37928104575163
+"38","SOTS","Nannobranchium achirus","Fish",58,1.2,"Lmeso","n","Muscle",-20.28,7.02,2.94986928104575
+"39","SOTS","Nannobranchium achirus","Fish",58,1.2,"Lmeso","y","Muscle",-20.99,7.64,3.13222222222222
+"40","SOTS","Nannobranchium achirus","Fish",79,3.2,"Lmeso","y","Muscle",-20.67,8.84,3.48516339869281
+"41","SOTS","Nannobranchium achirus","Fish",57,1.4,"Lmeso","y","Muscle",-21.08,9.53,3.6881045751634
+"42","SOTS","Nannobranchium achirus","Fish",50,0.8,"Lmeso","y","Muscle",-25.97,5.84,2.60281045751634
+"43","SOTS","Nannobranchium achirus","Fish",31,0.2,"Lmeso","y","Whole",-21.4075,6.6975,2.85501633986928
+"44","SOTS","Nannobranchium achirus","Fish",30,0.2,"Lmeso","y","Whole",-21.15,5.39,2.47045751633987
+"45","SOTS","Nannobranchium achirus","Fish",30,0.2,"Lmeso","y","Whole",-21.09,5.45,2.4881045751634
+"46","SOTS","Nannobranchium achirus","Fish",30,0.2,"Lmeso","y","Whole",-21.14,5.02,2.3616339869281
+"47","SOTS","Nannobranchium achirus","Fish",63,1.5,"Lmeso","y","Whole",-21.46,7.57,3.1116339869281
+"48","SOTS","Atolla wyvillei","Jellyfish",35,2,"Lmeso","n","Whole",-21.96,5.28,2.4381045751634
+"49","SOTS","Atolla wyvillei","Jellyfish",NA,NA,"Lmeso","y","Whole",-21.76334338,6.975670736,2.93683126222222
+"50","SOTS","Atolla wyvillei","Jellyfish",NA,NA,"Lmeso","y","Whole",-20.82880802,7.9041042,3.20989992810458
+"51","SOTS","Atolla wyvillei","Jellyfish",NA,NA,"Lmeso","y","Whole",-20.80097346,7.922337875,3.21526277369281
+"52","SOTS","Atolla wyvillei","Jellyfish",NA,NA,"Lmeso","y","Whole",-20.53532222,8.00488573,3.23954155457516
+"53","SOTS","Atolla wyvillei","Jellyfish",NA,NA,"Meso","y","Whole",-23.09893991,6.548690494,2.81124883810458
+"54","SOTS","Euphausia similis","Krill",19,0.1,"Epi","y","Whole",-21.26957684,5.11,2.3881045751634
+"55","SOTS","Euphausia similis","Krill",20,0.12,"Epi","y","Whole",-20.71596447,6.74,2.86751633986928
+"56","SOTS","Euphausia similis","Krill",20,0.1,"Epi","y","Whole",-20.801907,5.96,2.6381045751634
+"57","SOTS","Euphausia similis","Krill",22,0.1,"Epi","y","Whole",-20.91724055,7.21,3.00575163398693
+"58","SOTS","Euphausia similis","Krill",21,0.12,"Epi","y","Whole",-21.26400109,4.95,2.34104575163399
+"59","SOTS","Sergestes spp.","Prawn",43,0.47,"Meso","y","Whole",-26.3017094,5.629573869,2.54092041898693
+"60","SOTS","Sergestes spp.","Prawn",35,NA,"Meso","y","Whole",-21.51179901,7.879302578,3.20260533339869
+"61","SOTS","Sergestes spp.","Prawn",30,NA,"Meso","y","Whole",-20.93801443,5.705351241,2.56320788133987
+"62","SOTS","Sergestes spp.","Prawn",30,NA,"Meso","y","Whole",-22.47482263,6.750155114,2.87050313810458
+"63","SOTS","Gymnosomata","Pteropod",35,NA,"Lmeso","y","Whole",-21.89426728,8.813923887,3.47749395369281
+"64","SOTS","Gymnosomata","Pteropod",35,NA,"Lmeso","y","Whole",-21.86994957,8.783391842,3.46851394045752
+"65","SOTS","Gymnosomata","Pteropod",35,NA,"Lmeso","y","Whole",-21.91423506,8.859643583,3.49094092310458
+"66","SOTS","Gymnosomata","Pteropod",9,NA,"Lmeso","y","Whole",-23.51952041,6.140802,2.69128163398693
+"67","SOTS","Gymnosomata","Pteropod",12,NA,"Lmeso","y","Whole",-23.23694878,4.706713375,2.2694908619281
+"68","SOTS","Cranchidae","Squid",12,0.42,"Epi","n","Whole",-19.806,5.774,2.58339869281046
+"69","SOTS","Cranchidae","Squid",12,0.42,"Epi","y","Whole",-20.86426259,6.33,2.74692810457516
+"70","SOTS","Cranchidae","Squid",4,NA,"Epi","y","Whole",-21.7334867,8.57,3.40575163398693
+"71","SOTS","Cranchidae","Squid",17,0.6,"Lmeso","y","Whole",-22.6698608566667,7.44666666666667,3.07535947712418
+"72","SOTS","Cranchidae","Squid",20,1.2,"Lmeso","y","Whole",-22.39364598,7.04,2.95575163398693
+"73","SOTS","Cranchidae","Squid",49,2.2,"Lmeso","y","Whole",-21.63455803,6.17,2.69986928104575
+"74","SOTS","Cranchidae","Squid",65,NA,"Lmeso","y","Whole",-21.73536318,5.458704274,2.49066465575163
+"75","SOTS","Cranchidae","Squid",27,NA,"Lmeso","y","Whole",-20.96597518,5.939624857,2.63211188604575
+"76","SOTS","Cranchidae","Squid",27,NA,"Lmeso","y","Whole",-22.40726627,5.401912093,2.47396107310458
+"77","SOTS","Cranchidae","Squid",27,NA,"Lmeso","y","Whole",-22.53386031,5.242146025,2.42697105310458
+"78","SOTS","Cranchidae","Squid",25,NA,"Lmeso","y","Whole",-22.96294233,5.974539072,2.64238077281046
+"79","SOTS","Pyrosoma atlanticum","Tunicate",60,5.84,"Meso","n","Subsample",-23.568,2.434,1.60104575163399
+"80","SOTS","Pyrosoma atlanticum","Tunicate",40,4.3,"Meso","n","Subsample",-23.72,2.32,1.56751633986928
+"81","SOTS","Pyrosoma atlanticum","Tunicate",55,10.2,"Meso","y","Whole",-24.23,2.8,1.70869281045752
+"82","SOTS","Pyrosoma atlanticum","Tunicate",60,5.84,"Meso","y","Whole",-24.0433333333333,2.07,1.49398692810458
+"83","SOTS","Pyrosoma atlanticum","Tunicate",40,4.3,"Meso","y","Whole",-24.04,1.58,1.34986928104575
+"84","SOTS","Pyrosoma atlanticum","Tunicate",40,4.18,"Meso","y","Whole",-23.62,3.87,2.02339869281046
+"85","SOTS","Pyrosoma atlanticum","Tunicate",40,10.8,"Meso","y","Whole",-24.28,7.71,3.15281045751634
+"86","SOTS","Pyrosoma atlanticum","Tunicate",40,10.8,"Meso","y","Whole",-24.2,5.87,2.6116339869281
+"87","SOTS","Pyrosoma atlanticum","Tunicate",40,10.8,"Meso","y","Whole",-24.27,5.46,2.49104575163399

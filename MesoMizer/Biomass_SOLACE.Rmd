@@ -65,6 +65,75 @@ catchcomp_total1$Site <- factor(as.factor(catchcomp_total1$Site), levels = c("SO
 
 ```
 
+
+```{r}
+# Define the list of taxa of interest
+taxa_of_interest <- c("Euphausia similis", "Thysannoessa macura", "Sergestes spp", "Themisto spp", 
+                      "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp", 
+                      "Bathylagus spp", "Cranchidae", "Chaetognath", "Gymnosomata", 
+                      "Pyrosoma atlanticum", "Atolla wyvillei")
+
+# Filter the dataframe for the site "SOTS"
+filtered_data <- catchcomp_total1 %>%
+  filter(Site == "SOTS")%>%
+  filter(!(Taxa_PLAOS %in% c("Medusa", "Siphonophore", "Other", "Salp other", "Ctenophore" )))
+
+# Calculate the total biomass for the taxa of interest
+total_biomass_taxa_interest <- filtered_data %>%
+  filter(Taxa_updated %in% taxa_of_interest) %>%
+  summarise(total_biomass = sum(Weight_Std_gm3_sp, na.rm = TRUE)) %>%
+  pull(total_biomass)
+
+# Calculate the total biomass for all taxa
+total_biomass_all <- filtered_data %>%
+  summarise(total_biomass = sum(Weight_Std_gm3_sp, na.rm = TRUE)) %>%
+  pull(total_biomass)
+
+# Calculate the percentage of total biomass for the taxa of interest
+percentage_biomass <- (total_biomass_taxa_interest / total_biomass_all) * 100
+
+# Print the result
+print(percentage_biomass)
+
+```
+
+
+
+#fins taxa that make up 80% of biomass at SOTS
+
+```{r}
+
+# Filter the dataframe for the site "SOTS" and exclude specific taxa
+filtered_data <- catchcomp_total1 %>%
+  filter(Site == "SOTS") %>%
+  filter(!(Taxa_PLAOS %in% c("Medusa", "Siphonophore", "Other", "Salp other", "Ctenophore" )))
+
+
+# Calculate total weight per species, arrange by weight, and calculate cumulative percentage
+top_species <- filtered_data %>%
+  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
+  summarise(StdWt = sum(Weight_Std_gm3_sp)) %>% 
+  ungroup() %>% 
+  group_by(Taxa_updated) %>% 
+  summarise(av_weight = mean(StdWt)) %>% 
+  arrange(desc(av_weight)) %>%
+  mutate(cumulative_percentage = cumsum(av_weight) / sum(av_weight) * 100)
+
+# Filter species that comprise 80% of the total weight
+species_95_percent <- top_species %>%
+  filter(cumulative_percentage <= 95)
+
+# View the result
+print(species_95_percent)
+
+```
+
+```{r}
+c("Euphausia similis","Thysannoessa macura","Sergestes spp", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp","Bathylagus spp","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei")
+```
+
+
+
 #filter for target species
 
 ```{r}
@@ -83,20 +152,19 @@ catchcomp_total1 <- catchcomp_total1 %>%
   ))
 
 
+```
+
+```{r}
 Mesomizer_species <- catchcomp_total1 %>% 
   filter(Taxa_updated %in% c("Euphausia similis", "Thysannoessa macura", "Euphausia tricantha", "Gennadas spp.","Sergestes spp.", "Themisto spp", "Electrona antarctica", "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp.", "Bathylagus spp.", "Cranchidae", "Chaetognath", "Gymnosomata", "Pyrosoma atlanticum", "Salpa thompsoni", "Atolla wyvillei", "Periphylla Periphylla", "Omnivorous copepod", "Carnivorous copepod"))%>% 
 filter(Site == "SOTS")
 
-	
-
-
-
-
-
 ```
 
 
-#find biomass per species, depth & site
+
+
+#find biomass per species, depth at SOTS
 
 ```{r}
 
@@ -115,7 +183,7 @@ Percentage_depth <- Mesomizer_species %>%
   mutate(percent_depth = av_weight/total_weight*100) %>% 
   select(Depth_Stratum, Taxa_updated, percent_depth)
 
-
+write.csv(Percentage_depth, "Percentage_depth.csv")
 
 # Find biomass per species, depth & site
 Biomass_deployment <- Mesomizer_species %>%
@@ -145,6 +213,60 @@ write.csv(Biomass_deployment, "Biomass_av_wc.csv")
 
 ```
 
+#find biomass per species, depth & site - SIA chapter
+
+```{r}
+
+SIA_species <- catchcomp_total1 %>% 
+  filter(Taxa_updated %in% c("Euphausia similis", "Thysannoessa macura", "Euphausia triacantha", "Gennadas spp.","Sergestes spp.", "Themisto spp", "Electrona antarctica", "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp.", "Bathylagus spp.", "Cranchidae", "Chaetognath", "Gymnosomata", "Pyrosoma atlanticum","Salpa thompsoni", "Atolla wyvillei", "Periphylla periphylla")) 
+
+Percentage_depth_SIA <- SIA_species %>% 
+  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
+  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
+  summarise(StdWt = sum(Weight_Std_gm3_sp), .groups = "drop") %>% # Sum per species per deployment
+  group_by(Taxa_updated, Depth_Stratum, Site) %>% 
+  summarise(av_weight = mean(StdWt), .groups = "drop") %>% # Average across deployments
+  group_by(Taxa_updated, Site) %>% 
+  mutate(total_weight = sum(av_weight)) %>% # Total weight per taxa
+  mutate(percent_depth = av_weight / total_weight * 100) %>% 
+  ungroup() %>%
+  select(Depth_Stratum, Taxa_updated, percent_depth, Site) %>% 
+  ungroup() %>% 
+  select(Depth_Stratum, Taxa_updated, percent_depth) %>%
+  group_by(Taxa_updated) %>%
+  mutate(migration = if_else(any(percent_depth >= 80 & percent_depth <= 100), "resident", "migrator")) %>%
+  ungroup()
+
+
+write.csv(Percentage_depth_SIA, "Resident_v_migrator.csv")
+
+
+
+# Find biomass per species, depth & site
+Biomass_deployment_SIA <- SIA_species %>%
+  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
+  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
+  summarise(StdWt = sum(Weight_Std_gm3_sp)) %>% #one weight per species per deployment
+  ungroup() %>%
+  group_by(daylight, Taxa_updated, Depth_Stratum) %>%  
+  summarise(weight_mean_depth = mean(StdWt)) %>% #one weight per species per day/night & depth (average deployments)
+   ungroup() %>% 
+ mutate(g_m2 = case_when(
+    Depth_Stratum == "E" ~ weight_mean_depth * 200,
+    Depth_Stratum == "UM" ~ weight_mean_depth * 200,
+    Depth_Stratum == "LM" ~ weight_mean_depth * 600
+  )) %>% #convert from g m-3 to g m-2 by multipling by depth sampled. E = 200, UM = 200, LM = 600
+  group_by(daylight, Taxa_updated) %>%
+  summarise(
+    Weight_wc_gm2_sp = sum(g_m2, na.rm = TRUE) #one weight per species per whole water column (add each layer)
+  ) %>% 
+  ungroup() %>% 
+  group_by(Taxa_updated) %>% 
+  summarise(
+    weight_total_gm2_sp = mean(Weight_wc_gm2_sp) #average day and night values
+  )
+
+```
 
 #Find Biomass per model domain - not using this
 
