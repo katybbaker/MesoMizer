@@ -5,13 +5,15 @@ date: "2025-06-03"
 ---
 
 ```{r}
- rm(list =ls()) # clear memory
+library(dplyr)
+library(ggplot2)
+ 
+rm(list =ls()) # clear memory
 
 Lengths <- read.csv("Input_02_IN2020_V08_Lengths.csv")
+Abundance <- read.csv("abundance_av_wc.csv")
 
-#filter for model species:
 
-library(dplyr)
 
 Lengths <- Lengths %>% 
   # Filter relevant taxa from either column
@@ -26,13 +28,24 @@ Lengths <- Lengths %>%
       "Chaetognath", "Themisto", "themisto gudichaudii", 
       "Phylum Chaetognatha - undifferentiated", "Thysanoessa macrura"
     )
-  ) %>% 
+  )
+
+
+
+Lengths <- Lengths %>%
+  mutate(Taxa_updated = if_else(is.na(Taxa_updated), Species, Taxa_updated)) %>% 
+    filter(!(Taxa_updated %in% c("Hydromedusa", "Euphausia triacantha")))%>% 
   # Rename Species values
   mutate(
-    Species = case_when(
-      Species == "Phylum Chaetognatha - undifferentiated" ~ "Chaetognath",
-      Species == "themisto gudichaudii" ~ "Themisto",
-      TRUE ~ Species
+    Taxa_updated = case_when(
+      Taxa_updated == "Phylum Chaetognatha - undifferentiated" ~ "Chaetognath",
+      Taxa_updated == "Euphausia similis similis" ~ "Euphausia similis",
+      Taxa_updated == "Themisto" ~ "Themisto spp",
+      Taxa_updated == "Cranchiidae - undifferentiated" ~ "Cranchidae",
+      Taxa_updated == "Order Gymnosomata - undifferentiated" ~ "Gymnosomata",
+      Taxa_updated == "Themisto gaudichaudii" ~ "Themisto spp", 
+      Taxa_updated == "Thysanoessa macrura" ~ "Thysannoessa macura",
+      TRUE ~ Taxa_updated
     )
   )
 
@@ -40,72 +53,102 @@ Lengths <- Lengths %>%
 ```
 
 ```{r}
-library(dplyr)
-library(ggplot2)
 
-# 1. Clean and prepare Taxa_updated
-Lengths <- Lengths %>%
-  mutate(Taxa_updated = case_when(
-    Taxa_updated == "Themisto gaudichaudii" ~ "Themisto",
-    Taxa_updated == "Phylum Chaetognatha - undifferentiated" ~ "Chaetognath",
-    Taxa_updated == "Hydromedusa" ~ NA_character_,  # mark for removal
-    TRUE ~ Taxa_updated
-  )) %>%
-  filter(!(is.na(Taxa_updated) & Species == "Hydromedusa")) %>%  # remove remaining Hydromedusa
-  mutate(Taxon_grouped = ifelse(is.na(Taxa_updated), Species, Taxa_updated))
 
 # 2. Plot histograms (unsmoothed)
-ggplot(Lengths, aes(x = Length_mm, fill = Taxon_grouped)) +
+ggplot(Lengths, aes(x = Length_mm, fill = Taxa_updated)) +
   geom_histogram(binwidth = 2, color = "black", alpha = 0.7, position = "identity") +
-  facet_wrap(~ Taxon_grouped, scales = "free_x") +
+  facet_wrap(~ Taxa_updated, scales = "free_x") +
   theme_bw() +
   labs(x = "Length (mm)", y = "Count", title = "Length Distributions by Taxon (Histogram)") +
   theme(legend.position = "none")
 
 # 2. Plot smooth bell curves by taxon
-ggplot(Lengths, aes(x = Length_mm, fill = Taxon_grouped)) +
+ggplot(Lengths, aes(x = Length_mm, fill = Taxa_updated)) +
   geom_density(alpha = 0.6, adjust = 1.2) +
-  facet_wrap(~ Taxon_grouped, scales = "free_x") +
-  theme_bw() +
-  labs(x = "Length (mm)", y = "Density", title = "Length Distributions by Taxon") +
-  theme(legend.position = "none")
-
-```
-```{r}
-
-
-# 1. Create a unified taxon name column
-Lengths <- Lengths %>%
-  mutate(Taxon_grouped = ifelse(is.na(Taxa_updated), Species, Taxa_updated))
-
-# 2. Plot smooth density (bell curve) by taxon, free x-axes
-ggplot(Lengths, aes(x = Length_mm, fill = Taxon_grouped)) +
-  geom_density(alpha = 0.6, adjust = 1.2) +
-  facet_wrap(~ Taxon_grouped, scales = "free_x") +
+  facet_wrap(~ Taxa_updated, scales = "free_x") +
   theme_bw() +
   labs(x = "Length (mm)", y = "Density", title = "Length Distributions by Taxon") +
   theme(legend.position = "none")
 
 ```
 
+
+#Split into size bins and find length frequency
+
 ```{r}
 
+# Function to apply binning safely per group
+bin_lengths <- function(df, n_bins = 10) {
+  breaks <- quantile(df$Length_mm, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+  # Remove duplicate breaks
+  breaks <- unique(breaks)
+  
+  # Only bin if we have at least 2 unique breakpoints
+  if (length(breaks) > 1) {
+    df$bin <- cut(df$Length_mm, breaks = breaks, include.lowest = TRUE)
+  } else {
+    df$bin <- factor("all_same_length")  # fallback bin
+  }
+  return(df)
+}
 
+# Apply the function by group
+Lengths_binned <- Lengths %>%
+  group_by(Taxa_updated) %>%
+  group_modify(~ bin_lengths(.x)) %>%
+  ungroup() %>%
+  group_by(Taxa_updated, bin) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(Taxa_updated) %>%
+  mutate(proportion = count / sum(count))
 
-library(viridis)
+# View result
+print(Lengths_binned)
 
-
-
-# 2. Plot smoothed length distributions with log x-axis and viridis color
-ggplot(Lengths, aes(x = Length_mm, color = Taxon_grouped)) +
-  geom_density(size = 1.2, adjust = 1.2) +
-  scale_x_log10() +
-  scale_color_viridis_d(option = "D", end = 0.95) +  # match viridis Mizer plot
-  theme_bw() +
-  labs(x = "Length (mm, log scale)", y = "Density",
-       title = "Smoothed Length Distributions by Taxon (log scale)") +
-  theme(legend.position = "right")
 
 
 ```
+#multiply abundance by size frequency
+
+```{r}
+# Join abundance to length-frequency distribution
+Abundance_binned <- Lengths_binned %>%
+  left_join(Abundance, by = "Taxa_updated") %>%
+  mutate(
+    abundance_per_bin = proportion * abd_total_gm2_sp
+  )
+
+# View result
+print(Abundance_binned)
+
+
+ggplot(Abundance_binned, aes(x = bin, y = abundance_per_bin, fill = Taxa_updated)) +
+  geom_bar(stat = "identity", position = "stack") +
+  facet_wrap(~ Taxa_updated, scales = "free") +
+  labs(
+    x = "Size Bin",
+    y = "Abundance (g m⁻²)",
+    title = "Abundance per Size Bin by Taxa"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+Abundance_binned <- Abundance_binned %>%
+  mutate(
+    Taxa_updated = case_when(
+      Taxa_updated == "Bathylagus spp." ~ "Bathylagus spp",
+      Taxa_updated == "Cyclothone spp." ~ "Cyclothone spp",
+      Taxa_updated == "Sergestes spp." ~ "Sergestes spp",
+      TRUE ~ Taxa_updated
+    )
+  )
+
+
+write.csv(Abundance_binned, "Abundance_persize.csv")
+
+```
+
+
 

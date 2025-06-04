@@ -28,10 +28,12 @@ library(rgl)
 library(viridis)
 library(patchwork)
 library(scales)
+library(stringr)
 
  
  rm(list =ls()) # clear memory
  
+abundance_size <- read.csv("Abundance_persize.csv") 
 ```
 
 #Parameter description--------------------------------------------------
@@ -350,6 +352,123 @@ slope_biomass[100,]
 plot(slope_biomass)
 
 ```
+#validate model with size data from observations
+## 1. convert length to weight
+
+```{r}
+# from Ezekiel_ESS code
+
+# Step 1: Extract lower and upper bounds of each bin
+
+abundance_size <- abundance_size %>%
+  mutate(
+    bin = str_remove_all(bin, "\\[|\\]|\\(|\\)")  # remove brackets and parentheses
+  ) %>%
+  separate(bin, into = c("L_bin_min", "L_bin_max"), sep = ",", convert = TRUE)
+
+# Step 1: Create a new dataframe with only necessary species parameters
+species_params_df <- species_params(params) %>%
+  select(species, a, b)
+
+# Step 2: Join species parameters to your abundance_size data
+abundance_size <- abundance_size %>%
+  left_join(species_params_df, by = c("Taxa_updated" = "species"))
+
+
+# Step 3: Calculate min and max weight per bin
+abundance_size <- abundance_size %>%
+  mutate(
+    weight_min_obs = round(a * L_bin_min^b, 4),
+    weight_max_obs = round(a * L_bin_max^b, 4)
+  ) %>% 
+  select(Taxa_updated, L_bin_min, L_bin_max, count, proportion, abd_total_gm2_sp, abundance_per_bin, biomass_observed, a, b, weight_min_obs,weight_max_obs )
+
+biomass_size <- abundance_size %>%
+  mutate(
+    # Step 1: Midpoint of each length bin
+    length_mid = (L_bin_min + L_bin_max) / 2,
+    
+    # Step 2: Convert to weight using species-specific a and b
+    weight_mid_obs = (a * length_mid^b),
+    
+    # Step 3: Multiply by number to get biomass per bin (in grams per m²)
+    biomass_per_bin_obs = (weight_mid_obs * abundance_per_bin)
+  )
+
+
+ggplot(biomass_size, aes(x = weight_mid_obs, y = biomass_per_bin_obs)) +
+  geom_col() +
+  scale_x_log10() +  # optional: log scale for weight
+  scale_y_continuous() +
+  facet_wrap(~ Taxa_updated, scales = "free_y") +
+  labs(
+    x = "Weight (g, mid bin)",
+    y = "Biomass per bin (g/m²)",
+    title = "Size frequency distribution by taxon"
+  ) +
+  theme_bw()
+
+```
+#2. compare to modeled size spectra ----- stopped here - need different a and b from default
+
+```{r}
+
+
+
+# STEP 1: Define log10 bin edges, midpoints, and widths
+breaks <- 10^seq(-3, 3, 0.5)  # log-scaled weight breaks from 0.001 to 1000 g
+midpoints <- (head(breaks, -1) + tail(breaks, -1)) / 2
+widths <- diff(breaks)
+labels <- cut(midpoints, breaks = breaks, include.lowest = TRUE)
+
+# STEP 2: Create a bin lookup table
+bin_lookup <- data.frame(
+  weightclass = as.character(labels),
+  bin_midpoint = midpoints,
+  bin_width = widths
+)
+
+# STEP 3: Bin observed weights into these log-scale bins
+biomass_size <- biomass_size %>%
+  mutate(
+    weightclass = cut(weight_mid_obs, breaks = breaks, include.lowest = TRUE)
+  )
+
+# STEP 4: Join bin midpoints and widths into your observed data
+biomass_size <- biomass_size %>%
+  mutate(weightclass = as.character(weightclass)) %>%
+  left_join(bin_lookup, by = "weightclass")
+
+# STEP 5: Normalize biomass per bin by bin width
+biomass_size <- biomass_size %>%
+  mutate(
+    norm_biomass = biomass_per_bin_obs / bin_width
+  )
+
+# STEP 6: Rename species column to match Mizer
+biomass_size <- biomass_size %>%
+  rename(Species = Taxa_updated)
+
+# STEP 7: Summarize biomass per bin per species
+mean_biomass_size_spectra <- biomass_size %>%
+  group_by(bin_midpoint, Species) %>%
+  summarise(mean_nbiomass = mean(norm_biomass, na.rm = TRUE)) %>%
+  ungroup()
+
+# STEP 8: Plot observed vs. modeled size spectra
+plotSpectra(params_v1, power = 0, resource = FALSE) +
+  geom_point(data = mean_biomass_size_spectra,
+             aes(x = bin_midpoint, y = mean_nbiomass, colour = Species)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  facet_wrap(~ Species, scales = "free_y") +
+  theme_bw() +
+  labs(x = "Weight (g)", y = "Normalized Biomass (g/m² per bin width)")
+
+```
+
+
+
 #fraction of biomass thats a function of size
 ```{r}
 

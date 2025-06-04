@@ -51,7 +51,7 @@ print(polygon_m3)
 
 ```{r}
 catchcomp_total1 <- catchcomp_total %>% 
-  dplyr::select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated,Taxa_PLAOS,
+  dplyr::select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated,Taxa_PLAOS,Abd_Std_nosm3_sp,
                 Weight_Std_gm3_sp)  %>% 
   mutate(Depth_Stratum = case_when(Depth_Stratum == "Lmeso" ~ "LM",
                                           Depth_Stratum == "Meso" ~ "UM",
@@ -99,7 +99,7 @@ print(percentage_biomass)
 
 
 
-#fins taxa that make up 80% of biomass at SOTS
+#find taxa that make up 80% of biomass at SOTS
 
 ```{r}
 
@@ -211,6 +211,31 @@ Biomass_deployment <- Mesomizer_species %>%
 
 write.csv(Biomass_deployment, "Biomass_av_wc.csv")
 
+# Find biomass per species, depth & site
+abundance_deployment <- Mesomizer_species %>%
+  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Abd_Std_nosm3_sp) %>%
+  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
+  summarise(StdAbd = sum(Abd_Std_nosm3_sp)) %>% #one weight per species per deployment
+  ungroup() %>%
+  group_by(daylight, Taxa_updated, Depth_Stratum) %>%  
+  summarise(abd_mean_depth = mean(StdAbd)) %>% #one weight per species per day/night & depth (average deployments)
+   ungroup() %>% 
+ mutate(g_m2 = case_when(
+    Depth_Stratum == "E" ~ abd_mean_depth * 200,
+    Depth_Stratum == "UM" ~ abd_mean_depth * 200,
+    Depth_Stratum == "LM" ~ abd_mean_depth * 600
+  )) %>% #convert from g m-3 to g m-2 by multipling by depth sampled. E = 200, UM = 200, LM = 600
+  group_by(daylight, Taxa_updated) %>%
+  summarise(
+   abd_wc_nosm2_sp = sum(g_m2, na.rm = TRUE) #one weight per species per whole water column (add each layer)
+  ) %>% 
+  ungroup() %>% 
+  group_by(Taxa_updated) %>% 
+  summarise(
+    abd_total_gm2_sp = mean(abd_wc_nosm2_sp) #average day and night values
+  )
+
+write.csv(abundance_deployment, "abundance_av_wc.csv")
 ```
 
 #find biomass per species, depth & site - SIA chapter
@@ -267,16 +292,6 @@ Biomass_deployment_SIA <- SIA_species %>%
   )
 
 ```
-
-#Find Biomass per model domain - not using this
-
-```{r}
-# Biomass_depth_tod <- Biomass_deployment %>%
-#   mutate(Biomass_g = weight_total_gm3_sp * polygon_m3)
-# 
-# write.csv(Biomass_depth_tod, "Biomass_depth_Tod.csv")
-```
-
 
 
 
