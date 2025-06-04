@@ -33,7 +33,7 @@ library(stringr)
  
  rm(list =ls()) # clear memory
  
-abundance_size <- read.csv("Abundance_persize.csv") 
+Biomass_size <- read.csv("Biomass_persize.csv") 
 ```
 
 #Parameter description--------------------------------------------------
@@ -360,43 +360,45 @@ plot(slope_biomass)
 
 # Step 1: Extract lower and upper bounds of each bin
 
-abundance_size <- abundance_size %>%
+Biomass_size <- Biomass_size %>%
   mutate(
     bin = str_remove_all(bin, "\\[|\\]|\\(|\\)")  # remove brackets and parentheses
   ) %>%
-  separate(bin, into = c("L_bin_min", "L_bin_max"), sep = ",", convert = TRUE)
+  separate(bin, into = c("L_bin_min", "L_bin_max"), sep = ",", convert = TRUE) #length in cm
 
 # Step 1: Create a new dataframe with only necessary species parameters
-species_params_df <- species_params(params) %>%
+L_W_df <- species_params_df %>%
   select(species, a, b)
 
-# Step 2: Join species parameters to your abundance_size data
-abundance_size <- abundance_size %>%
-  left_join(species_params_df, by = c("Taxa_updated" = "species"))
-
-
-# Step 3: Calculate min and max weight per bin
-abundance_size <- abundance_size %>%
+#update a and b
+L_W_df <- L_W_df %>%
   mutate(
-    weight_min_obs = round(a * L_bin_min^b, 4),
-    weight_max_obs = round(a * L_bin_max^b, 4)
-  ) %>% 
-  select(Taxa_updated, L_bin_min, L_bin_max, count, proportion, abd_total_gm2_sp, abundance_per_bin, biomass_observed, a, b, weight_min_obs,weight_max_obs )
-
-biomass_size <- abundance_size %>%
-  mutate(
-    # Step 1: Midpoint of each length bin
-    length_mid = (L_bin_min + L_bin_max) / 2,
-    
-    # Step 2: Convert to weight using species-specific a and b
-    weight_mid_obs = (a * length_mid^b),
-    
-    # Step 3: Multiply by number to get biomass per bin (in grams per m²)
-    biomass_per_bin_obs = (weight_mid_obs * abundance_per_bin)
+    a = if_else(species == "Nannobrancium achirus", 0.00451, a),
+    b = if_else(species == "Nannobrancium achirus", 3, b)
   )
 
 
-ggplot(biomass_size, aes(x = weight_mid_obs, y = biomass_per_bin_obs)) +
+# Step 2: Join species parameters to your Biomass_size data
+Biomass_size <- Biomass_size %>%
+  left_join(L_W_df, by = c("Taxa_updated" = "species"))
+
+
+# Step 3: Calculate min and max weight per bin
+Biomass_size <- Biomass_size %>%
+  mutate(
+    weight_min_obs = round(a * L_bin_min^b, 4),
+    weight_max_obs = round(a * L_bin_max^b, 4))
+  # ) %>%
+  # select(Taxa_updated, L_bin_min, L_bin_max, count, proportion, abd_total_gm2_sp, abundance_per_bin, biomass_observed, a, b, weight_min_obs,weight_max_obs )
+
+Biomass_size <- Biomass_size %>%
+  mutate(
+    # Step 1: Midpoint of each length bin
+    weight_mid = (weight_min_obs + weight_max_obs) / 2
+  ) 
+
+
+ggplot(Biomass_size, aes(x = weight_mid, y = biomass_per_bin_g)) +
   geom_col() +
   scale_x_log10() +  # optional: log scale for weight
   scale_y_continuous() +
@@ -416,7 +418,7 @@ ggplot(biomass_size, aes(x = weight_mid_obs, y = biomass_per_bin_obs)) +
 
 
 # STEP 1: Define log10 bin edges, midpoints, and widths
-breaks <- 10^seq(-3, 3, 0.5)  # log-scaled weight breaks from 0.001 to 1000 g
+breaks <- 10^seq(-3, 3, 0.1)  # log-scaled weight breaks from 0.001 to 1000 g
 midpoints <- (head(breaks, -1) + tail(breaks, -1)) / 2
 widths <- diff(breaks)
 labels <- cut(midpoints, breaks = breaks, include.lowest = TRUE)
@@ -429,28 +431,28 @@ bin_lookup <- data.frame(
 )
 
 # STEP 3: Bin observed weights into these log-scale bins
-biomass_size <- biomass_size %>%
+Biomass_size <- Biomass_size %>%
   mutate(
-    weightclass = cut(weight_mid_obs, breaks = breaks, include.lowest = TRUE)
+    weightclass = cut(weight_mid, breaks = breaks, include.lowest = TRUE)
   )
 
 # STEP 4: Join bin midpoints and widths into your observed data
-biomass_size <- biomass_size %>%
+Biomass_size <- Biomass_size %>%
   mutate(weightclass = as.character(weightclass)) %>%
   left_join(bin_lookup, by = "weightclass")
 
 # STEP 5: Normalize biomass per bin by bin width
-biomass_size <- biomass_size %>%
+Biomass_size <- Biomass_size %>%
   mutate(
-    norm_biomass = biomass_per_bin_obs / bin_width
+    norm_biomass = biomass_per_bin_g / bin_width
   )
 
 # STEP 6: Rename species column to match Mizer
-biomass_size <- biomass_size %>%
+Biomass_size <- Biomass_size %>%
   rename(Species = Taxa_updated)
 
 # STEP 7: Summarize biomass per bin per species
-mean_biomass_size_spectra <- biomass_size %>%
+mean_biomass_size_spectra <- Biomass_size %>%
   group_by(bin_midpoint, Species) %>%
   summarise(mean_nbiomass = mean(norm_biomass, na.rm = TRUE)) %>%
   ungroup()
@@ -467,80 +469,91 @@ plotSpectra(params_v1, power = 0, resource = FALSE) +
 
 ```
 
+```{r}
+# STEP 8: Plot observed vs. modeled size spectra (combined plot)
+plotSpectra(params_v1, power = 4, resource = FALSE) +
+  geom_point(data = mean_biomass_size_spectra,
+             aes(x = bin_midpoint, y = mean_nbiomass, colour = Species)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_bw() +
+  labs(x = "Weight (g)", y = "Normalized Biomass (g/m² per bin width)")
+
+```
 
 
 #fraction of biomass thats a function of size
 ```{r}
-
-# 1. Run your Mizer model
-results <- project(params_v1)
-
-# 2. Extract final timestep biomass
-n_final <- results@n[nrow(results@n), , ]
-sizes <- params_v1@w
-biomass <- n_final * sizes
-
-# 3. Total community biomass at each size
-total_biomass_size <- colSums(biomass)
-total_biomass_size[total_biomass_size == 0] <- NA
-
-# 4. Calculate fraction of total community biomass per species and size
-fraction_matrix <- biomass / matrix(rep(total_biomass_size, each = nrow(biomass)),
-                                    nrow = nrow(biomass))
-
-# 5. Define fine log-size grid
-size_grid <- 10^seq(log10(min(sizes)), log10(max(sizes)), length.out = 300)
-
-# 6. Lognormal fit function with NO filtering
-fit_lognormal_fraction <- function(size, frac_vec, grid) {
-  if (sum(frac_vec, na.rm = TRUE) == 0) return(rep(NA, length(grid)))  # skip species with zero biomass
-  
-  log_size <- log10(size)
-  log_mean <- weighted.mean(log_size, frac_vec, na.rm = TRUE)
-  log_sd <- sqrt(weighted.mean((log_size - log_mean)^2, frac_vec, na.rm = TRUE))
-  
-  # handle edge cases
-  if (is.na(log_mean) || is.na(log_sd) || log_sd == 0) return(rep(NA, length(grid)))
-  
-  peak_contribution <- sum(frac_vec, na.rm = TRUE)
-  d <- dnorm(log10(grid), mean = log_mean, sd = log_sd)
-  (d / sum(d, na.rm = TRUE)) * peak_contribution  # scaled to real contribution
-}
-
-# 7. Apply smoother to ALL species (no filter)
-fraction_fits <- lapply(1:nrow(fraction_matrix), function(i) {
-  fit_lognormal_fraction(sizes, fraction_matrix[i, ], size_grid)
-})
-names(fraction_fits) <- rownames(fraction_matrix)
-
-# 8. Keep only species with actual biomass (not all-NA)
-valid <- sapply(fraction_fits, function(x) !all(is.na(x)))
-fraction_matrix_smooth <- do.call(cbind, fraction_fits[valid])
-species_names <- names(fraction_fits)[valid]
-
-# 9. Color palette for species (needed!)
-library(viridis)
-colors <- viridis(ncol(fraction_matrix_smooth), option = "D")
-
-# 10. Save as JPEG (since matplot is base graphics)
-jpeg("biomass_size_fraction.jpeg", width = 1200, height = 800, res = 150)
-
-# Increase right margin for external legend
-par(mar = c(5, 4, 4, 12), xpd = TRUE)
-
-# Plot
-matplot(size_grid, fraction_matrix_smooth, type = "l", log = "x",
-        lty = 1, lwd = 2,
-        col = colors,
-        xlab = "Size (g)", ylab = "Fraction of Total Community Biomass",
-        main = "")
-
-legend("topright", inset = c(-0.5, 0), legend = species_names,
-       col = colors, lty = 1, lwd = 2, cex = 0.75, bty = "n")
-
-dev.off()
-
-png("biomass_size_fraction.png", width = 1200, height = 800, res = 150)
+# 
+# # 1. Run your Mizer model
+# results <- project(params_v1)
+# 
+# # 2. Extract final timestep biomass
+# n_final <- results@n[nrow(results@n), , ]
+# sizes <- params_v1@w
+# biomass <- n_final * sizes
+# 
+# # 3. Total community biomass at each size
+# total_biomass_size <- colSums(biomass)
+# total_biomass_size[total_biomass_size == 0] <- NA
+# 
+# # 4. Calculate fraction of total community biomass per species and size
+# fraction_matrix <- biomass / matrix(rep(total_biomass_size, each = nrow(biomass)),
+#                                     nrow = nrow(biomass))
+# 
+# # 5. Define fine log-size grid
+# size_grid <- 10^seq(log10(min(sizes)), log10(max(sizes)), length.out = 300)
+# 
+# # 6. Lognormal fit function with NO filtering
+# fit_lognormal_fraction <- function(size, frac_vec, grid) {
+#   if (sum(frac_vec, na.rm = TRUE) == 0) return(rep(NA, length(grid)))  # skip species with zero biomass
+#   
+#   log_size <- log10(size)
+#   log_mean <- weighted.mean(log_size, frac_vec, na.rm = TRUE)
+#   log_sd <- sqrt(weighted.mean((log_size - log_mean)^2, frac_vec, na.rm = TRUE))
+#   
+#   # handle edge cases
+#   if (is.na(log_mean) || is.na(log_sd) || log_sd == 0) return(rep(NA, length(grid)))
+#   
+#   peak_contribution <- sum(frac_vec, na.rm = TRUE)
+#   d <- dnorm(log10(grid), mean = log_mean, sd = log_sd)
+#   (d / sum(d, na.rm = TRUE)) * peak_contribution  # scaled to real contribution
+# }
+# 
+# # 7. Apply smoother to ALL species (no filter)
+# fraction_fits <- lapply(1:nrow(fraction_matrix), function(i) {
+#   fit_lognormal_fraction(sizes, fraction_matrix[i, ], size_grid)
+# })
+# names(fraction_fits) <- rownames(fraction_matrix)
+# 
+# # 8. Keep only species with actual biomass (not all-NA)
+# valid <- sapply(fraction_fits, function(x) !all(is.na(x)))
+# fraction_matrix_smooth <- do.call(cbind, fraction_fits[valid])
+# species_names <- names(fraction_fits)[valid]
+# 
+# # 9. Color palette for species (needed!)
+# library(viridis)
+# colors <- viridis(ncol(fraction_matrix_smooth), option = "D")
+# 
+# # 10. Save as JPEG (since matplot is base graphics)
+# jpeg("biomass_size_fraction.jpeg", width = 1200, height = 800, res = 150)
+# 
+# # Increase right margin for external legend
+# par(mar = c(5, 4, 4, 12), xpd = TRUE)
+# 
+# # Plot
+# matplot(size_grid, fraction_matrix_smooth, type = "l", log = "x",
+#         lty = 1, lwd = 2,
+#         col = colors,
+#         xlab = "Size (g)", ylab = "Fraction of Total Community Biomass",
+#         main = "")
+# 
+# legend("topright", inset = c(-0.5, 0), legend = species_names,
+#        col = colors, lty = 1, lwd = 2, cex = 0.75, bty = "n")
+# 
+# dev.off()
+# 
+# png("biomass_size_fraction.png", width = 1200, height = 800, res = 150)
 
 ```
 

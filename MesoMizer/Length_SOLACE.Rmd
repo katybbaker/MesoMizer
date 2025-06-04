@@ -12,6 +12,8 @@ rm(list =ls()) # clear memory
 
 Lengths <- read.csv("Input_02_IN2020_V08_Lengths.csv")
 Abundance <- read.csv("abundance_av_wc.csv")
+Biomass <- read.csv("Biomass_av_wc.csv") #average biomass across all depths
+
 
 
 
@@ -46,8 +48,9 @@ Lengths <- Lengths %>%
       Taxa_updated == "Themisto gaudichaudii" ~ "Themisto spp", 
       Taxa_updated == "Thysanoessa macrura" ~ "Thysannoessa macura",
       TRUE ~ Taxa_updated
-    )
-  )
+    )) %>% 
+      mutate(Length_cm = Length_mm * 0.1) #convert mm to cm to fit with mizer length-weight params
+  
 
 
 ```
@@ -56,19 +59,19 @@ Lengths <- Lengths %>%
 
 
 # 2. Plot histograms (unsmoothed)
-ggplot(Lengths, aes(x = Length_mm, fill = Taxa_updated)) +
-  geom_histogram(binwidth = 2, color = "black", alpha = 0.7, position = "identity") +
-  facet_wrap(~ Taxa_updated, scales = "free_x") +
+ggplot(Lengths, aes(x = Length_cm)) +
+  geom_histogram(binwidth = 0.2, color = "black", alpha = 0.5, position = "identity") +
+  facet_wrap(~ Taxa_updated, scales = "free") +
   theme_bw() +
-  labs(x = "Length (mm)", y = "Count", title = "Length Distributions by Taxon (Histogram)") +
+  labs(x = "Length (cm)", y = "Count", title = "Length Distributions by Taxon (Histogram)") +
   theme(legend.position = "none")
 
 # 2. Plot smooth bell curves by taxon
-ggplot(Lengths, aes(x = Length_mm, fill = Taxa_updated)) +
+ggplot(Lengths, aes(x = Length_cm, fill = Taxa_updated)) +
   geom_density(alpha = 0.6, adjust = 1.2) +
   facet_wrap(~ Taxa_updated, scales = "free_x") +
   theme_bw() +
-  labs(x = "Length (mm)", y = "Density", title = "Length Distributions by Taxon") +
+  labs(x = "Length (cm)", y = "Density", title = "Length Distributions by Taxon") +
   theme(legend.position = "none")
 
 ```
@@ -79,14 +82,14 @@ ggplot(Lengths, aes(x = Length_mm, fill = Taxa_updated)) +
 ```{r}
 
 # Function to apply binning safely per group
-bin_lengths <- function(df, n_bins = 10) {
-  breaks <- quantile(df$Length_mm, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+bin_lengths <- function(df, n_bins = 20) {
+  breaks <- quantile(df$Length_cm, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
   # Remove duplicate breaks
   breaks <- unique(breaks)
-  
+
   # Only bin if we have at least 2 unique breakpoints
   if (length(breaks) > 1) {
-    df$bin <- cut(df$Length_mm, breaks = breaks, include.lowest = TRUE)
+    df$bin <- cut(df$Length_cm, breaks = breaks, include.lowest = TRUE)
   } else {
     df$bin <- factor("all_same_length")  # fallback bin
   }
@@ -109,33 +112,37 @@ print(Lengths_binned)
 
 
 ```
+
+
+
+
 #multiply abundance by size frequency
 
 ```{r}
 # Join abundance to length-frequency distribution
-Abundance_binned <- Lengths_binned %>%
-  left_join(Abundance, by = "Taxa_updated") %>%
+Biomass_binned <- Lengths_binned %>%
+  left_join(Biomass, by = "Taxa_updated") %>%
   mutate(
-    abundance_per_bin = proportion * abd_total_gm2_sp
+    biomass_per_bin_g = proportion * weight_total_gm2_sp
   )
 
 # View result
-print(Abundance_binned)
+print(Biomass_binned)
 
 
-ggplot(Abundance_binned, aes(x = bin, y = abundance_per_bin, fill = Taxa_updated)) +
+ggplot(Biomass_binned, aes(x = bin, y = biomass_per_bin_g, fill = Taxa_updated)) +
   geom_bar(stat = "identity", position = "stack") +
   facet_wrap(~ Taxa_updated, scales = "free") +
   labs(
     x = "Size Bin",
-    y = "Abundance (g m⁻²)",
-    title = "Abundance per Size Bin by Taxa"
+    y = "Biomass (g m⁻²)",
+    title = "Biomass per Size Bin by Taxa"
   ) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-Abundance_binned <- Abundance_binned %>%
+Biomass_binned<-Biomass_binned%>%
   mutate(
     Taxa_updated = case_when(
       Taxa_updated == "Bathylagus spp." ~ "Bathylagus spp",
@@ -146,7 +153,7 @@ Abundance_binned <- Abundance_binned %>%
   )
 
 
-write.csv(Abundance_binned, "Abundance_persize.csv")
+write.csv(Biomass_binned, "Biomass_persize.csv")
 
 ```
 
