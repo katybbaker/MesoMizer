@@ -68,8 +68,10 @@ knitr::kable(param_description, caption = "parameters' description")
 sp_1 <-
   data.frame(
     "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp","Bathylagus spp","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
-    "w_inf" = c(0.417,0.318,1.7,0.1,26.78,58.3,3.0,81.43,20,1.0,0.28,375.8,12), #references in species_params -> Mesomizer species params spreadsheet
-    "beta" = c(100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 200, 200), #lower ppmr for piscivores, higher for omnivores and planktivores
+    #"w_inf" = c(0.417,0.318,1.7,0.1,26.78,58.3,3.0,81.43,20,1.0,0.28,375.8,12), #references in species_params -> Mesomizer species params spreadsheet - some of these are smaller than w_max from heneghan- that's why we're likely seeing no von b
+    "w_max" = c(10^(0.2),10^(0.2), 10^(1.7), 10^(0.2), 10^2, 10^2, 10^2, 10^2, 10^(1.4), 10^(-0.9), 10^(-0.9), 10^4, 10^2),  #heneghan et al, 2020
+    "w_min" = c(10^(-4.2), 10^(-4.2), 10^(-4.2), 10^(-4.2), 10^(-3), 10^(-3), 10^(-3), 10^(-3), 10^(-4.2), 10^(-5.9), 10^(-5.9), 10^(-4.7), 10^(-3)), #heneghan et al, 2020
+    "beta" = c(10^6.6,10^6.6, 10^2, 10^6.6, 10^2, 10^2, 10^2, 10^2, 10^2, 10^3, 10^3, 10^6.8, 10^2.7), #lower ppmr for piscivores, higher for omnivores and planktivores - heneghan et al, 2020
     "biomass_observed" = c(0.1970, 0.1582, 0.0704,0.1012,0.6665,0.0658,0.4307,0.1493,0.2333,4.3799,0.0126,31.4392,0.1215), #biomass in g m-2. See Biomass_SOLACE.rmd
     "biomass_cutoff" = c(0.006, 0.0021, 0.104, 0.0013, 0.829, 0.1181, 0.0013, 0.162, 0.0008, 0.006, 0.0004, 6, 0.0021), #Length_SOLACE.rmd 
     "k_vb" = c(0.6, 0.4, 0.8, 0.6, 0.2, 0.4, 0.9, 0.5, 0.4, 0.2, 0.2,0.2,0.2),
@@ -138,9 +140,51 @@ knitr::kable(sp_2_inter_df, caption = "Species' interactions")
 
 ```{r}
  
- sp_2 <- newMultispeciesParams(sp_1, sp_2_inter, w_pp_cutoff = 0.01) #changed to 0.001 in later iteration 
+ sp_2 <- newMultispeciesParams(sp_1, sp_2_inter, w_pp_cutoff = 0.1) #changed to 0.001 in later iteration 
  params_v0 <- setParams(sp_2)
 
+ params_v0 <- steady(params_v0)
+ 
+ plot(params_v0)
+ 
+ #calibrate here
+```
+
+Calibrate the scale
+```{r}
+#plotBiomassVsSpecies(params)
+# run below x 2
+params <- calibrateBiomass(params_v0) #this just scales the resource spectrum
+params<-steady(params)
+
+# check Sheldon spectrum and feeding level to ensure enough food available
+plotlySpectra(params,power= 2)
+plotlyFeedingLevel(params)
+
+```
+
+
+#Rescale Species Spectra, Rince and repeat (till convergence is achieved in 1.5 years)
+```{r}
+#tuneParams(params)
+
+params <- params|> matchGrowth() |>steady()
+
+
+
+params <- params|> matchBiomasses() |>steady()
+
+
+
+plot(params)
+
+plotGrowthCurves(params, species_panel = TRUE)
+
+species_params(params)
+
+plotBiomassObservedVsModel(params)
+
+#tuneParams(params)
 ```
 
 # Thermizer -> set thermal tolerances for species
@@ -280,7 +324,35 @@ write.csv(species_params_df, file = "species_params.csv", row.names = FALSE)
 ```
 
 
+Calibrate the scale
+```{r}
+#plotBiomassVsSpecies(params)
+# run below x 2
+params <- calibrateBiomass(params_v1)
+params<-steady(params)
 
+# check Sheldon spectrum and feeding level to ensure enough food available
+plotlySpectra(params,power= 2)
+plotlyFeedingLevel(params)
+
+```
+
+Rescale Species Spectra, Rince and repeat (till convergence is achieved in 1.5 years)
+```{r}
+for (i in 1:20) {
+  params <- params  |> matchBiomasses() |> steady()
+}
+```
+
+could use to the below plot instead to check ratio is within +/- 1.2 model biomass/observed biomass for all species (I stopped when Total Relative Error was 0.385)
+```{r}
+plotBiomassObservedVsModel(params,ratio=F,labels=F)
+plotlyFeedingLevel(params)
+plotGrowthCurves(params, species_panel = TRUE)
+plotSpectra(params)
+
+species_params(params)$erepro
+```  
 
 
 
