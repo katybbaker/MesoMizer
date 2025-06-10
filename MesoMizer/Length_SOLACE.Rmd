@@ -13,7 +13,13 @@ rm(list =ls()) # clear memory
 Lengths <- read.csv("Input_02_IN2020_V08_Lengths.csv")
 Abundance <- read.csv("abundance_av_wc.csv")
 Biomass <- read.csv("Biomass_av_wc.csv") #average biomass across all depths
-
+L_W_df <- read.csv("L_W_df.csv")
+cyclothone_L_W <- read.csv("cyclothone_LW.csv")
+Euphausia_L_W <- read.csv("Euphausia_LW.csv")
+bathylagus_L_W <- read.csv("bathylagus_LW.csv")
+l.australis_L_W <- read.csv("l.australis_LW.csv")
+segestes_L_W <- read.csv("Segestes_LW.csv")
+Themisto_L_W <- read.csv("Themisto_LW.csv")
 
 
 
@@ -47,11 +53,29 @@ Lengths <- Lengths %>%
       Taxa_updated == "Order Gymnosomata - undifferentiated" ~ "Gymnosomata",
       Taxa_updated == "Themisto gaudichaudii" ~ "Themisto spp", 
       Taxa_updated == "Thysanoessa macrura" ~ "Thysannoessa macura",
+      # Taxa_updated == "Bathylagus spp." ~ "Bathylagus spp",
+      # Taxa_updated == "Sergestes spp." ~ "Sergestes spp", 
+      # Taxa_updated == "Cyclothone spp." ~ "Cyclothone spp",
       TRUE ~ Taxa_updated
     )) %>% 
       mutate(Length_cm = Length_mm * 0.1) #convert mm to cm to fit with mizer length-weight params
   
 
+
+
+min_lengths <- Lengths %>%
+  filter(Length_cm > 0) %>%
+  group_by(Taxa_updated) %>%
+  summarise(Min_Length_cm = min(Length_cm, na.rm = TRUE))
+
+Biomass_size <- min_lengths %>%
+  left_join(L_W_df, by = c("Taxa_updated" = "species"))
+
+min_size <- Biomass_size %>%
+  mutate(
+    weight_min_obs = round(a * Min_Length_cm^b, 4))
+
+write.csv(min_size, "min_size.csv")
 
 ```
 
@@ -157,5 +181,65 @@ write.csv(Biomass_binned, "Biomass_persize.csv")
 
 ```
 
+#L to W conversions
+
+```{r}
+
+
+
+# Select only relevant columns and ensure Weight..g. is numeric
+cyclothone_L_W <- cyclothone_L_W %>%
+  select(Species, Length..mm., Weight..g.) %>%
+  mutate(Weight..g. = as.numeric(Weight..g.))
+
+Euphausia_L_W <- Euphausia_L_W %>%
+  select(Species, Length..mm., Weight..g.) %>%
+  mutate(Weight..g. = as.numeric(Weight..g.))
+
+bathylagus_L_W <- bathylagus_L_W %>%
+  select(Species, Length..mm., Weight..g.) %>%
+  mutate(Weight..g. = as.numeric(Weight..g.))
+
+l.australis_L_W <- l.australis_L_W %>%
+  select(Species, Length..mm., Weight..g.) %>%
+  mutate(Weight..g. = as.numeric(Weight..g.))
+
+segestes_L_W <- segestes_L_W %>%
+  select(Species, Length..mm., Weight..g.) %>%
+  mutate(Weight..g. = as.numeric(Weight..g.))
+
+Themisto_L_W <- Themisto_L_W %>%
+  select(Species, Length..mm., Weight..g.) %>%
+  mutate(Weight..g. = as.numeric(Weight..g.))
+
+# Now safely bind them all
+combined_LW <- bind_rows(
+  cyclothone_L_W,
+  Euphausia_L_W,
+  bathylagus_L_W,
+  l.australis_L_W,
+  Themisto_L_W,
+  segestes_L_W
+) %>%
+  mutate(Length_cm = Length..mm. / 10)
+
+
+
+# 1. Fit the model log(W) = log(a) + b * log(L)
+lw_fits <- combined_LW %>%
+  filter(Length_cm > 0, Weight..g. > 0) %>%  # remove zeros if present
+  group_by(Species) %>%
+  do({
+    fit <- lm(log10(Weight..g.) ~ log10(Length_cm), data = .)
+    data.frame(
+      a = 10^coef(fit)[1],
+      b = coef(fit)[2],
+      r_squared = summary(fit)$r.squared
+    )
+  })
+
+
+
+```
 
 
