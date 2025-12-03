@@ -53,31 +53,72 @@ Lengths <- Lengths %>%
       Taxa_updated == "Order Gymnosomata - undifferentiated" ~ "Gymnosomata",
       Taxa_updated == "Themisto gaudichaudii" ~ "Themisto spp", 
       Taxa_updated == "Thysanoessa macrura" ~ "Thysannoessa macura",
-      # Taxa_updated == "Bathylagus spp." ~ "Bathylagus spp",
-      # Taxa_updated == "Sergestes spp." ~ "Sergestes spp", 
-      # Taxa_updated == "Cyclothone spp." ~ "Cyclothone spp",
-      TRUE ~ Taxa_updated
+      Taxa_updated == "Bathylagus spp." ~ "Bathylagus spp",
+      Taxa_updated == "Sergestes spp." ~ "Sergestes spp",
+      Taxa_updated == "Cyclothone spp." ~ "Cyclothone spp",
+       TRUE ~ Taxa_updated
     )) %>% 
-      mutate(Length_cm = Length_mm * 0.1) #convert mm to cm to fit with mizer length-weight params
-  
+      mutate(Length_cm = Length_mm * 0.1) %>% #convert mm to cm to fit with mizer length-weight params
+  select(-Species)
 
-
-
-min_lengths <- Lengths %>%
-  filter(Length_cm > 0) %>%
-  group_by(Taxa_updated) %>%
-  summarise(Min_Length_cm = min(Length_cm, na.rm = TRUE))
-
-Biomass_size <- min_lengths %>%
-  left_join(L_W_df, by = c("Taxa_updated" = "species"))
-
-min_size <- Biomass_size %>%
-  mutate(
-    weight_min_obs = round(a * Min_Length_cm^b, 4))
-
-write.csv(min_size, "min_size.csv")
 
 ```
+
+#convert length (cm) to weight (g)
+
+```{r}
+Biomass_size <- Lengths %>% 
+  left_join(L_W_df, by = c("Taxa_updated" = "species")) %>% 
+   mutate(
+    weight_g = round(a * Length_cm^b, 4))
+
+write.csv(Biomass_size, "W_subsample.csv")
+
+
+Biomass_size$weightclass <- cut(Biomass_size$weight_g,breaks=10^seq(-4,6,0.1))
+
+
+#get midpoint of weight class - not sure these ranges are correct
+
+upp<-10^seq(-3,6,0.1)
+low<-10^seq(-4,5.5,0.1)
+widths<-upp-low
+mid<-(widths + 2*widths)/2 # midpoint of weightclass
+
+# # get midpoints for x-axis
+# levels(Biomass_size$weightclass)<-mid
+# Biomass_size$weightclass<-round(as.integer(as.character(Biomass_size$weightclass)),2)
+
+
+#normalise biomass y-axis
+bio_size$widths<-bio_size$weightclass
+levels(bio_size$widths)<-widths
+bio_size$widths<-round(as.integer(as.character(bio_size$widths)),2)
+bio_size$norm_biomass<-bio_size$Biomass/bio_size $widths
+
+
+```
+
+
+```{r}
+# 
+# 
+# min_lengths <- Lengths %>%
+#   filter(Length_cm > 0) %>%
+#   group_by(Taxa_updated) %>%
+#   summarise(Min_Length_cm = min(Length_cm, na.rm = TRUE))
+# 
+# Biomass_size <- min_lengths %>%
+#   left_join(L_W_df, by = c("Taxa_updated" = "species"))
+# 
+# min_size <- Biomass_size %>%
+#   mutate(
+#     weight_min_obs = round(a * Min_Length_cm^b, 4))
+# 
+# write.csv(min_size, "min_size.csv")
+
+```
+
 
 ```{r}
 
@@ -238,6 +279,34 @@ lw_fits <- combined_LW %>%
     )
   })
 
+
+L_W_df <- L_W_df %>% #from CSIRO CT data - see Length_SOLACE.rmd
+  mutate(
+    a = case_when(
+      species == "Bathylagus spp"          ~ 0.000955300,
+      species == "Lampanyctus australis"   ~ 0.004096641,
+      species == "Nannobrachium achirus"   ~ 0.004096641,
+      species == "Sergestes spp"           ~ 0.027368356,
+      species == "Euphausia similis"       ~ 0.014153442,
+      species == "Themisto spp"            ~ 0.037427319,
+      species == "Thysannoessa macura"     ~ 0.014153442,
+      TRUE                                 ~ 0.006 # keep original
+    ),
+    b = case_when(
+      species == "Bathylagus spp"          ~ 4.0805980,
+      species == "Lampanyctus australis"   ~ 3.3634087,
+      species == "Nannobrachium achirus"   ~ 3.3634087,
+      species == "Sergestes spp"           ~ 2.2115872,
+      species == "Euphausia similis"       ~ 2.7878962,
+      species == "Themisto spp"            ~ 1.6712583,
+      species == "Thysannoessa macura"     ~ 2.7878962,
+      TRUE                                 ~ 3  # keep original
+    )
+  )
+
+
+
+write.csv(L_W_df, file = "L_W_df.csv", row.names = FALSE)
 
 
 ```

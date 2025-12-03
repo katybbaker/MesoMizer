@@ -1,0 +1,113 @@
+"","Site","daylight","Depth_Stratum","Deployment","Taxa_updated","Weight_Std_gm3_sp","nos","weight_g","av_weight","Abd_Std_nosm3_sp"
+"1","SOTS","Day","LM",7,"Atolla wyvillei",8.44e-06,3,0.5,0.166666667,5.06e-05
+"2","SOTS","Night","LM",13,"Atolla wyvillei",0.000134987,1,8,8,1.69e-05
+"3","SOTS","Day","LM",14,"Atolla wyvillei",8.44e-06,1,0.5,0.5,1.69e-05
+"4","SOTS","Night","UM",18,"Atolla wyvillei",0.000455579,1,9,9,5.06e-05
+"5","SOTS","Day","LM",22,"Atolla wyvillei",0.000337466,5,20,4,8.44e-05
+"6","SOTS","Day","LM",7,"Bathylagus spp.",0.000759299,2,45,22.5,3.37e-05
+"7","SOTS","Night","LM",13,"Bathylagus spp.",1.69e-05,1,1,1,1.69e-05
+"8","SOTS","Day","LM",22,"Bathylagus spp.",3.37e-05,2,2,1,3.37e-05
+"9","SOTS","Day","LM",22,"Bathylagus spp.",0.000168733,3,10,3.333333333,5.06e-05
+"10","SOTS","Night","E",5,"Cranchidae",0.000835229,4,16.5,4.125,0.00020248
+"11","SOTS","Night","LM",6,"Cranchidae",8.44e-06,1,0.5,0.5,1.69e-05
+"12","SOTS","Day","LM",7,"Cranchidae",8.44e-06,1,0.5,0.5,1.69e-05
+"13","SOTS","Day","E",8,"Cranchidae",0.00010124,1,2,2,5.06e-05
+"14","SOTS","Night","E",11,"Cranchidae",0.00030372,28,6,0.214285714,0.001417358
+"15","SOTS","Night","UM",12,"Cranchidae",2.53e-05,4,0.5,0.125,0.00020248
+"16","SOTS","Night","LM",13,"Cranchidae",8.44e-05,3,5,1.666666667,5.06e-05
+"17","SOTS","Day","LM",14,"Cranchidae",1.69e-05,1,1,1,1.69e-05
+"18","SOTS","Day","E",15,"Cranchidae",2.53e-05,7,0.5,0.071428571,0.00035434
+"19","SOTS","Night","E",17,"Cranchidae",0.002530997,30,50,1.666666667,0.001518598
+"20","SOTS","Night","UM",18,"Cranchidae",5.06e-05,2,1,0.5,0.00010124
+"21","SOTS","Day","LM",22,"Cranchidae",0.000843666,6,50,8.333333333,0.00010124
+"22","SOTS","Night","LM",6,"Cyclothone spp.",7.59e-05,29,4.5,0.155172414,0.000489326
+"23","SOTS","Day","LM",7,"Cyclothone spp.",0.001636711,77,97,1.25974026,0.001299245
+"24","SOTS","Day","E",8,"Cyclothone spp.",5.06e-05,23,1,0.043478261,0.001164259
+"25","SOTS","Night","LM",13,"Cyclothone spp.",0.000168733,40,10,0.25,0.000674933
+"26","SOTS","Day","LM",14,"Cyclothone spp.",0.000843666,250,50,0.2,0.004218328
+"27","SOTS","Day","E",15,"Cyclothone spp.",5.06e-05,20,1,0.05,0.001012399
+"28","SOTS","Day","UM",16,"Cyclothone spp.",2.53e-05,1,0.5,0.5,5.06e-05
+"29","SOTS","Day","LM",22,"Cyclothone spp.",0.001383612,136,82,0.602941176,0.002294771
+"30","SOTS","Night","LM",13,"Euphausia similis",1.69e-05,23,1,0.043478261,0.000388086
+"31","SOTS","Day","E",15,"Euphausia similis",2.53e-05,2,0.5,0.25,0.00010124
+"32","SOTS","Day","UM",16,"Euphausia similis",5.06e-05,10,1,0.1,0.000506199
+"33","SOTS","Night","E",17,"Euphausia similis",0.00032903,180,6.5,0.036111111,0.009111589
+"34","SOTS","Night","UM",18,"Euphausia similis",0.00020248,58,4,0.068965517,0.002935956
+"35","SOTS","Night","LM",6,"Euphausia similis",1.69e-05,40,1,0.025,0.000674933
+"36","SOTS","Day","UM",10,"Euphausia similis",5.06e-05,24,1,0.041666667,0.001214879
+"37","SOTS","Night","E",11,"Euphausia similis",0.001797008,555,35.5,0.063963964,0.028094066
+"38","SOTS","Night","UM",12,"Euphausia similis",5.06e-05,47,1,0.021276596,0.002379137
+"39","SOTS","Night","LM",13,"Euphausia similis",8.44e-06,14,0.5,0.035714286,0.000236226
+"40","SOTS","Day","LM",14,"Euphausia similis",8.44e-06,4,0.5,0.125,6.75e-05
+"41","SOTS","Day","LM",7,"Euphausia similis",3.37e-05,13,2,0.153846154,0.000219353
+"42","SOTS","Night","UM",12,"Euphausia similis",0.0002531,52,5,0.096153846,0.002632237
+"43","SOTS","Day","LM",22,"Euphausia similis",0.000134987,65,8,0.123076923,0.001096765
+"44","SOTS","Night","E",5,"Lampanyctus australis",0.000582129,2,11.5,5.75,0.00010124
+"45","SOTS","Day","LM",7,"Lampanyctus australis",0.001653585,27,98,3.62962963,0.000455579
+"46","SOTS","Night","E",11,"Lampanyctus australis",0.002328517,9,46,5.111111111,0.000455579
+"47","SOTS","Day","LM",14,"Lampanyctus australis",0.000421833,8,25,3.125,0.000134987
+"48","SOTS","Night","E",17,"Lampanyctus australis",0.00020248,4,4,1,0.00020248
+"49","SOTS","Night","UM",18,"Lampanyctus australis",0.002708167,8,53.5,6.6875,0.00040496
+"50","SOTS","Day","LM",22,"Lampanyctus australis",0.000843666,17,50,2.941176471,0.000286846
+"51","SOTS","Day","LM",7,"Nannobrachium achirus",1.69e-05,3,1,0.333333333,5.06e-05
+"52","SOTS","Day","LM",22,"Nannobrachium achirus",0.00020248,5,12,2.4,8.44e-05
+"53","SOTS","Night","E",5,"Euphausia similis",2.53e-05,7,0.5,0.071428571,0.00035434
+"54","SOTS","Night","LM",6,"Euphausia similis",8.44e-06,4,0.5,0.125,6.75e-05
+"55","SOTS","Night","E",11,"Euphausia similis",0.001518598,450,30,0.066666667,0.022778972
+"56","SOTS","Day","LM",14,"Euphausia similis",0.00015186,28,9,0.321428571,0.000472453
+"57","SOTS","Night","UM",18,"Euphausia similis",2.53e-05,13,0.5,0.038461538,0.000658059
+"58","SOTS","Night","LM",13,"Gymnosomata",8.44e-06,1,0.5,0.5,1.69e-05
+"59","SOTS","Day","LM",22,"Gymnosomata",3.37e-05,6,2,0.333333333,0.00010124
+"60","SOTS","Day","UM",3,"Chaetognath",0.00020248,77,4,0.051948052,0.003897735
+"61","SOTS","Night","E",5,"Chaetognath",0.00030372,126,6,0.047619048,0.006378112
+"62","SOTS","Night","LM",6,"Chaetognath",0.000607439,128,36,0.28125,0.002159784
+"63","SOTS","Day","LM",7,"Chaetognath",0.002193531,665,130,0.195488722,0.011220753
+"64","SOTS","Day","E",8,"Chaetognath",0.000733989,154,14.5,0.094155844,0.00779547
+"65","SOTS","Day","UM",10,"Chaetognath",5.06e-05,14,1,0.071428571,0.000708679
+"66","SOTS","Night","E",11,"Chaetognath",0.020045495,5544,396,0.071428571,0.280636936
+"67","SOTS","Night","UM",12,"Chaetognath",0.002682857,289,53,0.183391003,0.014629162
+"68","SOTS","Night","LM",13,"Chaetognath",0.001147385,300,68,0.226666667,0.005061994
+"69","SOTS","Day","LM",14,"Chaetognath",0.002733477,6750,162,0.024,0.11389486
+"70","SOTS","Day","E",15,"Chaetognath",0.039989751,3950,790,0.2,0.199948755
+"71","SOTS","Day","UM",16,"Chaetognath",0.002024798,167,40,0.239520958,0.00845353
+"72","SOTS","Night","E",17,"Chaetognath",0.007592991,500,150,0.3,0.025309969
+"73","SOTS","Night","UM",18,"Chaetognath",0.001164259,203,23,0.113300493,0.010275847
+"74","SOTS","Day","LM",22,"Chaetognath",0.003880862,766.67,230,0.299998696,0.012936263
+"75","SOTS","Day","UM",3,"Pyrosoma atlanticum",0.25254287,31,4989,160.9354839,0.001569218
+"76","SOTS","Night","E",5,"Pyrosoma atlanticum",0.274309444,13,5419,416.8461538,0.000658059
+"77","SOTS","Night","LM",6,"Pyrosoma atlanticum",0.009600915,2,569,284.5,3.37e-05
+"78","SOTS","Day","UM",10,"Pyrosoma atlanticum",0.181776197,20,3591,179.55,0.001012399
+"79","SOTS","Night","E",11,"Pyrosoma atlanticum",0.025714928,3,508,169.3333333,0.00015186
+"80","SOTS","Night","LM",13,"Pyrosoma atlanticum",0.000674933,1,40,40,1.69e-05
+"81","SOTS","Day","E",15,"Pyrosoma atlanticum",0.029207704,2,577,288.5,0.00010124
+"82","SOTS","Day","UM",16,"Pyrosoma atlanticum",0.00840291,1,166,166,5.06e-05
+"83","SOTS","Night","E",17,"Pyrosoma atlanticum",0.025866788,3,511,170.3333333,0.00015186
+"84","SOTS","Night","UM",18,"Pyrosoma atlanticum",0.003796495,1,75,75,5.06e-05
+"85","SOTS","Day","LM",22,"Pyrosoma atlanticum",0.003256549,1,193,193,1.69e-05
+"86","SOTS","Day","LM",7,"Sergestes spp.",0.00012655,19,7.5,0.394736842,0.000320593
+"87","SOTS","Night","E",11,"Sergestes spp.",5.06e-05,1,1,1,5.06e-05
+"88","SOTS","Night","UM",12,"Sergestes spp.",7.59e-05,2,1.5,0.75,0.00010124
+"89","SOTS","Night","LM",13,"Sergestes spp.",8.44e-06,6,0.5,0.083333333,0.00010124
+"90","SOTS","Day","LM",14,"Sergestes spp.",0.000168733,15,10,0.666666667,0.0002531
+"91","SOTS","Night","E",17,"Sergestes spp.",0.0002531,3,5,1.666666667,0.00015186
+"92","SOTS","Night","UM",18,"Sergestes spp.",5.06e-05,2,1,0.5,0.00010124
+"93","SOTS","Day","LM",22,"Sergestes spp.",0.000168733,35,10,0.285714286,0.000590566
+"94","SOTS","Day","UM",3,"Themisto spp",2.53e-05,14,0.5,0.035714286,0.000708679
+"95","SOTS","Night","E",5,"Themisto spp",2.53e-05,36,0.5,0.013888889,0.001822318
+"96","SOTS","Night","LM",6,"Themisto spp",8.44e-06,4,0.5,0.125,6.75e-05
+"97","SOTS","Day","E",8,"Themisto spp",5.06e-05,69,1,0.014492754,0.003492776
+"98","SOTS","Day","UM",10,"Themisto spp",2.53e-05,4,0.5,0.125,0.00020248
+"99","SOTS","Night","E",11,"Themisto spp",0.000658059,85,13,0.152941176,0.004302695
+"100","SOTS","Night","LM",13,"Themisto spp",8.44e-06,5,0.5,0.1,8.44e-05
+"101","SOTS","Day","LM",14,"Themisto spp",8.44e-06,5,0.5,0.1,8.44e-05
+"102","SOTS","Day","E",15,"Themisto spp",2.53e-05,4,0.5,0.125,0.00020248
+"103","SOTS","Day","UM",16,"Themisto spp",2.53e-05,9,0.5,0.055555556,0.000455579
+"104","SOTS","Night","E",17,"Themisto spp",0.00015186,208,3,0.014423077,0.010528947
+"105","SOTS","Night","UM",18,"Themisto spp",0.00010124,32,2,0.0625,0.001619838
+"106","SOTS","Day","LM",22,"Themisto spp",0.00035434,5,21,4.2,8.44e-05
+"107","SOTS","Night","UM",12,"Thysannoessa macura",7.59e-05,22,1.5,0.068181818,0.001113639
+"108","SOTS","Night","LM",13,"Thysannoessa macura",1.69e-05,7,1,0.142857143,0.000118113
+"109","SOTS","Day","E",15,"Thysannoessa macura",2.53e-05,9,0.5,0.055555556,0.000455579
+"110","SOTS","Day","UM",16,"Thysannoessa macura",2.53e-05,7,0.5,0.071428571,0.00035434
+"111","SOTS","Night","E",17,"Thysannoessa macura",0.001417358,450,28,0.062222222,0.022778972
+"112","SOTS","Night","UM",18,"Thysannoessa macura",5.06e-05,32,1,0.03125,0.001619838

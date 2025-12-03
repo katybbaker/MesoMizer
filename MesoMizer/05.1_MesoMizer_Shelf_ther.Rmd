@@ -69,21 +69,23 @@ sp_1 <-
   data.frame(
     "species" = c("Euphausia similis","Thysannoessa macura","Sergestes spp", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp","Bathylagus spp","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"),
     #"w_inf" = c(0.417,0.318,1.7,0.1,26.78,58.3,3.0,81.43,20,1.0,0.28,375.8,12), #references in species_params -> Mesomizer species params spreadsheet - some of these are smaller than w_max from heneghan- that's why we're likely seeing no von b
-    "w_max" = c(10^(0.2),10^(0.2), 10^(1.7), 10^(0.2), 10^2, 10^2, 10^2, 10^2, 10^(1.4), 10^(-0.9), 10^(-0.9), 10^4, 10^2),  #heneghan et al, 2020
+    "w_max" = c(10^(0.2),10^(0.2), 10^(1.7), 10^(0.2), 10^2, 10^2, 10^2, 10^2, 10^(1.4), 3.7, 0.24, 416, 10^2),  #heneghan et al, 2020; pyrosome, gymnosomata, chaetognath: max_g from SOLACE data
     "w_min" = c(10^(-4.2), 10^(-4.2), 10^(-4.2), 10^(-4.2), 10^(-3), 10^(-3), 10^(-3), 10^(-3), 10^(-4.2), 10^(-5.9), 10^(-5.9), 10^(-4.7), 10^(-3)), #heneghan et al, 2020
     "beta" = c(10^6.6,10^6.6, 10^2, 10^6.6, 10^2, 10^2, 10^2, 10^2, 10^2, 10^3, 10^3, 10^6.8, 10^2.7), #lower ppmr for piscivores, higher for omnivores and planktivores - heneghan et al, 2020
     "biomass_observed" = c(0.1970, 0.1582, 0.0704,0.1012,0.6665,0.0658,0.4307,0.1493,0.2333,4.3799,0.0126,31.4392,0.1215), #biomass in g m-2. See Biomass_SOLACE.rmd
     "biomass_cutoff" = c(0.006, 0.0021, 0.104, 0.0013, 0.829, 0.1181, 0.0013, 0.162, 0.0008, 0.006, 0.0004, 6, 0.0021), #Length_SOLACE.rmd 
     "k_vb" = c(0.6, 0.4, 0.8, 0.6, 0.2, 0.4, 0.9, 0.5, 0.4, 0.2, 0.2,0.2,0.2),
     "gear_mort" = c(0,0,0,0,0,0,0,0,0,0,0,0,0),
-    "RQ" = c(1.7, 1.7, 1.45, 1.45, 2.5, 2.5, 2.5, 2.5, 2.6, 1.67, 1.58, 2.8, 0.97), #see carbon spreadsheet for references
+    #"RQ" = c(1.7, 1.7, 1.45, 1.45, 2.5, 2.5, 2.5, 2.5, 2.6, 1.67, 1.58, 2.8, 0.97), #see carbon spreadsheet for references
+    "RQ" = c(1.29, 1.29, 1.4, 0.97, 0.9, 0.9, 0.9, 0.9, 0.97, 0.97, 0.8, 1.16, 0.97),
     #"p_FC" = c(0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4, 0.4, 0.4,0.4), # carbon content of fecal pellets (%)
-    "p_FC" = c(0.2, 0.2, 0.2,0.2, 0.2, 0.2,0.2, 0.2, 0.2,0.2, 0.2, 0.2,0.2), # carbon content of fecal pellets (%)
+   # "p_FC" = c(0.2, 0.2, 0.2,0.2, 0.2, 0.2,0.2, 0.2, 0.2,0.11, 0.2, 0.2,0.2), # carbon content of fecal pellets (%)
+   "p_FC" = c(0.15, 0.15, 0.15, 0.15, 0.07, 0.07, 0.07, 0.07, 0.07, 0.11, 0.07, 0.22, 0.07) ,
     "z0" = c(0.1, 0.1, 0.1,0.1, 0.1, 0.1, 0.1, 0.1, 0.1,0.1, 0.1, 0.1, 0.1), # carrion parameter - may delete
    "rho" = c(200, 200, 200, 200, 200, 200,200, 200, 200,200, 200, 200,200)) # carrion parameter - may delete
 #"sigma" = c(0.7,0.7, 1.3,1.3,1.3,1.3,1.3,1.3,1.3,0.46,0.57,0.7,0.52)) #- this causes p. atlanticum to go extinct(too narrow... factor these in later)
 
-              
+
 knitr::kable(sp_1, caption = "species' parameters")
 
 
@@ -140,7 +142,7 @@ knitr::kable(sp_2_inter_df, caption = "Species' interactions")
 
 ```{r}
  
- sp_2 <- newMultispeciesParams(sp_1, sp_2_inter, w_pp_cutoff = 0.1) #changed to 0.001 in later iteration 
+ sp_2 <- newMultispeciesParams(sp_1, sp_2_inter, w_pp_cutoff = 0.1) #change back to 0.1 if it goes tits up
  params_v0 <- setParams(sp_2)
 
  params_v0 <- steady(params_v0)
@@ -158,8 +160,9 @@ params <- calibrateBiomass(params_v0) #this just scales the resource spectrum
 params<-steady(params)
 
 # check Sheldon spectrum and feeding level to ensure enough food available
-plotlySpectra(params,power= 2)
+plotlySpectra(params,power= 2, total = TRUE)
 plotlyFeedingLevel(params)
+
 
 ```
 
@@ -168,10 +171,10 @@ plotlyFeedingLevel(params)
 ```{r}
 #tuneParams(params)
 
-params <- params|> matchGrowth() |>steady()
+#params <- params|> matchGrowth() |>steady()
 
 
-
+# x9
 params <- params|> matchBiomasses() |>steady()
 
 
@@ -194,8 +197,8 @@ plotBiomassObservedVsModel(params)
 # Assign them thermal tolerance limits - general thresholds based on literature (species params spreadsheet)
 temp_min <- c(-5, -5,-5, -5,-5, -5,-5, -5,-5, -5,-5, 0,-5)
 temp_max <- c(13, 13,13, 13,13, 13,13, 13,13, 12,13, 20,13) 
-species_params(params_v0)$temp_min <- temp_min
-species_params(params_v0)$temp_max <- temp_max
+species_params(params)$temp_min <- temp_min
+species_params(params)$temp_max <- temp_max
 ```
 
 
@@ -203,8 +206,8 @@ species_params(params_v0)$temp_max <- temp_max
 
 ```{r}
 realm_names <- c("Epi","Umeso","Lmeso")
-species_names <- as.character(params_v0@species_params$species)
-sizes <- params_v0@w
+species_names <- as.character(params@species_params$species)
+sizes <- params@w
 
 # Create the vertical migration array and fill it
 vertical_migration_array <- array(0, dim = (c(length(realm_names), 
@@ -277,7 +280,7 @@ for (i in 1:length(times)) {
 ```{r}
 
 
-params_v1 <- upgradeTherParams(params = params_v0, 
+params_v1 <- upgradeTherParams(params = params, 
                             temp_min = temp_min,
                             temp_max = temp_max,
                             ocean_temp_array = ocean_temp_array,
@@ -305,20 +308,16 @@ params_v1 <- upgradeTherParams(params = params_v0,
 # changed w_pp_cutoff to 0.001 g
 #saved as "tuned_params (8).rds" 
 
-params_v1 <- readRDS("tuned_params (8).rds") 
+#params_v1 <- readRDS("tuned_params (8).rds") 
 
 # Update the "p_FC" parameter
 
 #"Euphausia similis","Thysannoessa macura","Sergestes spp", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp","Bathylagus #spp","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"
+# 
+# params_v1@species_params$p_FC <- c(0.15, 0.15, 0.15, 0.15, 0.07, 0.07, 0.07, 0.07, 0.07, 0.45, 0.07, 0.22, 0.07)  
+# params_v1@species_params$RQ <- c(1.29, 1.29, 1.4, 0.97, 0.9, 0.9, 0.9, 0.9, 0.97, 0.97, 0.8, 1.16, 0.97) #see carbon spreadsheet for references
+# 
 
-params_v1@species_params$p_FC <- c(0.15, 0.15, 0.15, 0.15, 0.07, 0.07, 0.07, 0.07, 0.07, 0.45, 0.07, 0.22, 0.07)  
-params_v1@species_params$RQ <- c(1.29, 1.29, 1.4, 0.97, 0.9, 0.9, 0.9, 0.9, 0.97, 0.97, 0.8, 1.16, 0.97) #see carbon spreadsheet for references
-
-
-
-
-species_params_df <- params_v1@species_params
-write.csv(species_params_df, file = "species_params.csv", row.names = FALSE)
 
 
 ```
@@ -328,52 +327,151 @@ Calibrate the scale
 ```{r}
 #plotBiomassVsSpecies(params)
 # run below x 2
-params <- calibrateBiomass(params_v1)
-params<-steady(params)
+
+params_v1 <- calibrateBiomass(params_v1)
+params_v1<-steady(params_v1)
 
 # check Sheldon spectrum and feeding level to ensure enough food available
-plotlySpectra(params,power= 2)
-plotlyFeedingLevel(params)
+plotlySpectra(params_v1,power= 2)
+plotlyFeedingLevel(params_v1)
+
+
+params_v1 <- params_v1|> matchBiomasses() |>steady()
+
+
+
+plot(params_v1)
+
+plotGrowthCurves(params_v1, species_panel = TRUE)
+
+species_params(params_v1)
+
+plotBiomassObservedVsModel(params_v1)
+
+# tuneParams(params_v1)
 
 ```
 
-Rescale Species Spectra, Rince and repeat (till convergence is achieved in 1.5 years)
+
+
+
+
+
+#check mortality
+
 ```{r}
-for (i in 1:20) {
-  params <- params  |> matchBiomasses() |> steady()
-}
+
+tuneParams(params_v1)
+mort <- getMort(params_v1)
+matplot(params_v1@w, t(mort), type = "l", log = "x", lty = 1,
+        xlab = "Weight (g)", ylab = "Mortality rate")
+
+#change mortality rate of pyrosomes
+
+params_v1@species_params$z0[params_v1@species_params$species == "Pyrosoma atlanticum"] <- 0.2
+params_v1@species_params$z0[params_v1@species_params$species == "Cyclothone spp"] <- 0.3
+params_v1@species_params$z0[params_v1@species_params$species == "Sergestes spp"] <- 0.3
+params_v1@species_params$z0[params_v1@species_params$species == "Lampanyctus australis"] <- 0.2
+params_v1@species_params$z0[params_v1@species_params$species == "Nannobrachium achirus"] <- 0.2
+params_v1@species_params$z0[params_v1@species_params$species == "Bathylagus spp"] <- 0.2
+params_v1@species_params$z0[params_v1@species_params$species == "Cranchidae"] <- 0.2
+params_v1@species_params$z0[params_v1@species_params$species == "Chaetognath"] <- 0.1
+
+#check 
+params_v1@species_params %>%
+  select(species, z0)
+
+
+params_v1 <- upgradeTherParams(params = params_v1, 
+                            temp_min = temp_min,
+                            temp_max = temp_max,
+                            ocean_temp_array = ocean_temp_array,
+                           # n_pp_array = n_pp_array, 
+                            vertical_migration_array = vertical_migration_array,
+                            exposure_array = exposure_array, 
+                            aerobic_effect = TRUE, 
+                            metabolism_effect = TRUE)
+
+
+
+
+#recalibrate
+
+params_v1 <- calibrateBiomass(params_v1)
+params_v1<-steady(params_v1)
+
+params_v1 <- params_v1|> matchBiomasses() |>steady()
+
+plotGrowthCurves(params_v1, species_panel = TRUE)
+
+species_params(params_v1)
+
+plotBiomassObservedVsModel(params_v1)
+
+plotlySpectra(params_v1,power= 2, total = TRUE)
+plotlyFeedingLevel(params_v1)
+
+
+species_params_df <- params_v1@species_params
+write.csv(species_params_df, file = "species_params.csv", row.names = FALSE)
+
 ```
-
-could use to the below plot instead to check ratio is within +/- 1.2 model biomass/observed biomass for all species (I stopped when Total Relative Error was 0.385)
-```{r}
-plotBiomassObservedVsModel(params,ratio=F,labels=F)
-plotlyFeedingLevel(params)
-plotGrowthCurves(params, species_panel = TRUE)
-plotSpectra(params)
-
-species_params(params)$erepro
-```  
-
-
 
 
 
 #Supplementary plots---------------------------------------------------------------------
 
 ```{r}
+# Step 1: Extract the data
+spectra_data <- plotSpectra(params_v1, power = 0, total = FALSE, return_data = TRUE)
 
-sim_2 <- project(params_v1)
+# Step 2: Define species and formatted labels
+species_names <- unique(spectra_data$Species)
 
+# Create a named vector of labels
+label_map <- setNames(
+  lapply(species_names, function(name) {
+    if (name %in% c("Resource", "Cranchidae", "Chaetognath", "Gymnosomata")) {
+      name
+    } else {
+      bquote(italic(.(name)))
+    }
+  }),
+  species_names
+)
 
+# Save consistent colors as a named vector
+color_map <- setNames(scales::hue_pal()(length(species_names)), species_names)
 
-plotSpectra(params_v1, power = 0, total = FALSE) + 
+ggplot(spectra_data, aes(x = w, y = value, color = Species)) +
+  geom_line() +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_color_manual(
+    values = scales::hue_pal()(length(species_names)),  # default color palette
+    labels = label_map
+  ) +
+  labs(x = "Weight (g)", y = "Number density (1/g)") +
   theme_minimal() +
   theme(
-    axis.text = element_text(size = 14),  # Adjust size of axis text
-    axis.title = element_text(size = 16), # Adjust size of axis titles
-    legend.text = element_text(size = 12), # Adjust size of legend text
-    legend.title = element_text(size = 14) # Adjust size of legend title
-  )
+    axis.text = element_text(size = 14),
+    axis.title = element_text(size = 16),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14)
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 1.2)))  # Optional: adjust legend line size
+
+ggsave("Supp_fig1_ss0.png")
+
+
+# plotSpectra(params_v1, power = 0, total = FALSE) + 
+#   theme_minimal() +
+#   theme(
+#     axis.text = element_text(size = 14),  # Adjust size of axis text
+#     axis.title = element_text(size = 16), # Adjust size of axis titles
+#     legend.text = element_text(size = 12), # Adjust size of legend text
+#     legend.title = element_text(size = 14) # Adjust size of legend title
+#   )
 
 
 ggsave("Supp_fig1_ss0.png")
@@ -408,8 +506,44 @@ ggplot(diet_plot, aes(x = w, y = Proportion, fill = Prey)) +
   geom_area() +
   facet_wrap(~ Predator, scales = "free_x") +  # Ensure unique x-axis per species
   scale_x_log10() +  # Keep log scale
-  theme_minimal() +
+   theme_minimal() + 
   labs(x = "Size [g]", y = "Proportion")
+
+
+# Define prey species names (adjust if needed)
+prey_species <- unique(diet_plot$Prey)
+
+# Define custom legend labels with italics
+label_map <- setNames(
+  lapply(prey_species, function(name) {
+    if (name %in% c("Resource", "Cranchidae", "Chaetognath", "Gymnosomata")) {
+      name
+    } else {
+      bquote(italic(.(name)))
+    }
+  }),
+  prey_species
+)
+
+# Create color map if needed
+color_map <- setNames(scales::hue_pal()(length(prey_species)), prey_species)
+
+# Final plot
+ggplot(diet_plot, aes(x = w, y = Proportion, fill = Prey)) +
+  geom_area() +
+  facet_wrap(~ Predator, scales = "free_x", ncol = 4) +
+  scale_x_log10() +
+  scale_fill_manual(values = color_map, labels = label_map) +
+  labs(x = "Size [g]", y = "Proportion") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14),
+    axis.title = element_text(size = 16),
+    strip.text = element_text(size = 16),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    panel.spacing = unit(2, "lines")
+  )
 
 
 
@@ -421,17 +555,57 @@ ggsave("Supp_fig5_death.png")
 
 
 
+# Extract data
+biomass_data <- plotBiomassObservedVsModel(params_v1, return_data = TRUE)
 
+# Add 'Species' column if needed
+if ("species" %in% names(biomass_data)) {
+  biomass_data$Species <- biomass_data$species
+}
 
-
-plotBiomassObservedVsModel(params_v1, labels = FALSE) +
+# Replot
+ggplot(biomass_data, aes(x = observed, y = model, color = Species)) +
+  geom_point(size = 3) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_color_manual(values = color_map, labels = label_map) +
+  labs(x = "Observed biomass (g m⁻²)", y = "Modeled biomass (g m⁻²)") +
   theme_minimal() +
-  geom_abline(slope = 1, intercept = 0,
-              color = "darkblue",
-              linewidth = 1.2,
-              linetype = "dashed")
+  theme(
+    axis.text = element_text(size = 14),
+    axis.title = element_text(size = 16),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14)
+  )
+
 
 ggsave("Supp_fig6_biomassobservedvmodel.png")
+
+
+plotGrowthCurves(params_v1, species_panel = TRUE) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 8),
+    panel.spacing = unit(1.5, "lines")
+  )
+
+ggsave("Supp_fig7_growth_curves.png")
+
+
+plotGrowthCurves(params_v1, species_panel = TRUE) +
+  theme_minimal(base_size = 18) +  # Base text size for all elements
+  theme(
+    strip.text = element_text(size = 20, face = "bold"),  # Facet labels
+    axis.title = element_text(size = 22),                 # Axis titles
+    axis.text = element_text(size = 120),                  # Axis tick labels
+    legend.position = "none",
+    panel.spacing = unit(2, "lines"),
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+
+ggsave("growth_curves_wide.png", plot = p, width = 14, height = 8, dpi = 300)
 
 
 
@@ -443,85 +617,92 @@ plotEnergyBudget(params_v1)
 
 
 ```
+
 #validate model with size data from observations
 ## 1. convert length to weight
 
 ```{r}
-# from Ezekiel_ESS code
-
-# Step 1: Extract lower and upper bounds of each bin
-
-Biomass_size <- Biomass_size %>%
-  mutate(
-    bin = str_remove_all(bin, "\\[|\\]|\\(|\\)")  # remove brackets and parentheses
-  ) %>%
-  separate(bin, into = c("L_bin_min", "L_bin_max"), sep = ",", convert = TRUE) #length in cm
-
-species_params_df <- params_v1@species_params
-
-# Step 1: Create a new dataframe with only necessary species parameters
-L_W_df <- species_params_df %>%
-  select(species, a, b)
-
-
-L_W_df <- L_W_df %>% #from CSIRO CT data - see Length_SOLACE.rmd
-  mutate(
-    a = case_when(
-      species == "Bathylagus spp"          ~ 0.000955300,
-      species == "Lampanyctus australis"   ~ 0.004096641,
-      species == "Nannobrachium achirus"   ~ 0.004096641,
-      species == "Sergestes spp"           ~ 0.027368356,
-      species == "Euphausia similis"       ~ 0.014153442,
-      species == "Themisto spp"            ~ 0.037427319,
-      species == "Thysannoessa macura"     ~ 0.014153442,
-      TRUE                                 ~ a  # keep original
-    ),
-    b = case_when(
-      species == "Bathylagus spp"          ~ 4.0805980,
-      species == "Lampanyctus australis"   ~ 3.3634087,
-      species == "Nannobrachium achirus"   ~ 3.3634087,
-      species == "Sergestes spp"           ~ 2.2115872,
-      species == "Euphausia similis"       ~ 2.7878962,
-      species == "Themisto spp"            ~ 1.6712583,
-      species == "Thysannoessa macura"     ~ 2.7878962,
-      TRUE                                 ~ b  # keep original
-    )
-  )
-
-
-
-write.csv(L_W_df, file = "L_W_df.csv", row.names = FALSE)
-
-# Step 2: Join species parameters to your Biomass_size data
-Biomass_size <- Biomass_size %>%
-  left_join(L_W_df, by = c("Taxa_updated" = "species"))
-
-
-# Step 3: Calculate min and max weight per bin
-Biomass_size <- Biomass_size %>%
-  mutate(
-    weight_min_obs = round(a * L_bin_min^b, 4),
-    weight_max_obs = round(a * L_bin_max^b, 4))
-
-
-Biomass_size <- Biomass_size %>%
-  mutate(
-    # Step 1: Midpoint of each length bin
-    weight_mid = (weight_min_obs + weight_max_obs) / 2
-  ) 
-
-
-ggplot(Biomass_size, aes(x = weight_mid, y = biomass_per_bin_g)) +
-  geom_col() +
-  scale_x_log10() +  # optional: log scale for weight
-  scale_y_continuous() +
-  facet_wrap(~ Taxa_updated, scales = "free_y") +
-  labs(
-    x = "Weight (g, mid bin)",
-    y = "Biomass per bin (g/m²)",
-    title = "Size frequency distribution by taxon"
-  ) +
-  theme_bw()
+# # from Ezekiel_ESS code
+# 
+# # Step 1: Extract lower and upper bounds of each bin
+# 
+# Biomass_size <- Biomass_size %>%
+#   mutate(
+#     bin = str_remove_all(bin, "\\[|\\]|\\(|\\)")  # remove brackets and parentheses
+#   ) %>%
+#   separate(bin, into = c("L_bin_min", "L_bin_max"), sep = ",", convert = TRUE) #length in cm
+# 
+# species_params_df <- params_v1@species_params
+# species_params_df$a <- NA
+# species_params_df$b <- NA
+# 
+# # Step 1: Create a new dataframe with only necessary species parameters
+# L_W_df <- species_params_df %>%
+#   select(species, a, b)
+# 
+# #"Euphausia similis","Thysannoessa macura","Sergestes spp", "Themisto spp", "Lampanyctus australis","Nannobrachium achirus","Cyclothone spp","Bathylagus #spp","Cranchidae","Chaetognath","Gymnosomata","Pyrosoma atlanticum","Atolla wyvillei"
+# 
+# 
+# L_W_df <- L_W_df %>% #from CSIRO CT data - see Length_SOLACE.rmd
+#   mutate(
+#     a = case_when(
+#       species == "Bathylagus spp"          ~ 0.000955300,
+#       species == "Lampanyctus australis"   ~ 0.004096641,
+#       species == "Nannobrachium achirus"   ~ 0.004096641,
+#       species == "Sergestes spp"           ~ 0.027368356,
+#       species == "Euphausia similis"       ~ 0.014153442,
+#       species == "Themisto spp"            ~ 0.037427319,
+#       species == "Thysannoessa macura"     ~ 0.014153442,
+        #species == "Pyrosoma atlanticum" ~ 0.147,
+#       TRUE                                 ~ 0.006 # keep original
+#     ),
+#     b = case_when(
+#       species == "Bathylagus spp"          ~ 4.0805980,
+#       species == "Lampanyctus australis"   ~ 3.3634087,
+#       species == "Nannobrachium achirus"   ~ 3.3634087,
+#       species == "Sergestes spp"           ~ 2.2115872,
+#       species == "Euphausia similis"       ~ 2.7878962,
+#       species == "Themisto spp"            ~ 1.6712583,
+#       species == "Thysannoessa macura"     ~ 2.7878962,
+        #species == "Pyrosoma atlanticum" ~ 3.02,
+#       TRUE                                 ~ 3  # keep original
+#     )
+#   )
+# 
+# 
+# 
+# write.csv(L_W_df, file = "L_W_df.csv", row.names = FALSE)
+# 
+# # Step 2: Join species parameters to your Biomass_size data
+# Biomass_size <- Biomass_size %>%
+#   left_join(L_W_df, by = c("Taxa_updated" = "species"))
+# 
+# 
+# # Step 3: Calculate min and max weight per bin
+# Biomass_size <- Biomass_size %>%
+#   mutate(
+#     weight_min_obs = round(a * L_bin_min^b, 4),
+#     weight_max_obs = round(a * L_bin_max^b, 4))
+# 
+# 
+# Biomass_size <- Biomass_size %>%
+#   mutate(
+#     # Step 1: Midpoint of each length bin
+#     weight_mid = (weight_min_obs + weight_max_obs) / 2
+#   ) 
+# 
+# 
+# ggplot(Biomass_size, aes(x = weight_mid, y = biomass_per_bin_g)) +
+#   geom_col() +
+#   scale_x_log10() +  # optional: log scale for weight
+#   scale_y_continuous() +
+#   facet_wrap(~ Taxa_updated, scales = "free_y") +
+#   labs(
+#     x = "Weight (g, mid bin)",
+#     y = "Biomass per bin (g/m²)",
+#     title = "Size frequency distribution by taxon"
+#   ) +
+#   theme_bw()
 
 ```
 
@@ -532,60 +713,60 @@ ggplot(Biomass_size, aes(x = weight_mid, y = biomass_per_bin_g)) +
 ```{r}
 
 # 
-
-# STEP 1: Define log10 bin edges, midpoints, and widths
-breaks <- 10^seq(-3, 3, 0.1)  # log-scaled weight breaks from 0.001 to 1000 g
-midpoints <- (head(breaks, -1) + tail(breaks, -1)) / 2
-widths <- diff(breaks)
-labels <- cut(midpoints, breaks = breaks, include.lowest = TRUE)
-
-# STEP 2: Create a bin lookup table
-bin_lookup <- data.frame(
-  weightclass = as.character(labels),
-  bin_midpoint = midpoints,
-  bin_width = widths
-)
-
-# STEP 3: Bin observed weights into these log-scale bins
-Biomass_size <- Biomass_size %>%
-  mutate(
-    weightclass = cut(weight_mid, breaks = breaks, include.lowest = TRUE)
-  )
-
-# STEP 4: Join bin midpoints and widths into your observed data
-Biomass_size <- Biomass_size %>%
-  mutate(weightclass = as.character(weightclass)) %>%
-  left_join(bin_lookup, by = "weightclass")
-
-# STEP 5: Normalize biomass per bin by bin width
-Biomass_size <- Biomass_size %>%
-  mutate(
-    norm_biomass = biomass_per_bin_g / bin_width
-  )
-
-# STEP 6: Rename species column to match Mizer
-Biomass_size <- Biomass_size %>%
-  rename(Species = Taxa_updated)
-
-# STEP 7: Summarize biomass per bin per species
-mean_biomass_size_spectra <- Biomass_size %>%
-  group_by(bin_midpoint, Species) %>%
-  summarise(mean_nbiomass = mean(norm_biomass, na.rm = TRUE)) %>%
-  ungroup()
-
-
-
-# STEP 8: Plot observed vs. modeled size spectra
-plotSpectra(params_v1, power = 0, resource = FALSE) +
-  geom_point(data = mean_biomass_size_spectra,
-             aes(x = bin_midpoint, y = mean_nbiomass, colour = Species)) +
-  scale_x_log10() +
-  scale_y_log10() +
-  facet_wrap(~ Species, scales = "free_y") +
-  theme_bw() +
-  labs(x = "Weight (g)", y = "Normalized Biomass (g/m² per bin width)")
-
-# ggsave("obs_mod_sizespectra.jpeg")
+# 
+# # STEP 1: Define log10 bin edges, midpoints, and widths
+# breaks <- 10^seq(-3, 3, 0.1)  # log-scaled weight breaks from 0.001 to 1000 g
+# midpoints <- (head(breaks, -1) + tail(breaks, -1)) / 2
+# widths <- diff(breaks)
+# labels <- cut(midpoints, breaks = breaks, include.lowest = TRUE)
+# 
+# # STEP 2: Create a bin lookup table
+# bin_lookup <- data.frame(
+#   weightclass = as.character(labels),
+#   bin_midpoint = midpoints,
+#   bin_width = widths
+# )
+# 
+# # STEP 3: Bin observed weights into these log-scale bins
+# Biomass_size <- Biomass_size %>%
+#   mutate(
+#     weightclass = cut(weight_mid, breaks = breaks, include.lowest = TRUE)
+#   )
+# 
+# # STEP 4: Join bin midpoints and widths into your observed data
+# Biomass_size <- Biomass_size %>%
+#   mutate(weightclass = as.character(weightclass)) %>%
+#   left_join(bin_lookup, by = "weightclass")
+# 
+# # STEP 5: Normalize biomass per bin by bin width
+# Biomass_size <- Biomass_size %>%
+#   mutate(
+#     norm_biomass = biomass_per_bin_g / bin_width
+#   )
+# 
+# # STEP 6: Rename species column to match Mizer
+# Biomass_size <- Biomass_size %>%
+#   rename(Species = Taxa_updated)
+# 
+# # STEP 7: Summarize biomass per bin per species
+# mean_biomass_size_spectra <- Biomass_size %>%
+#   group_by(bin_midpoint, Species) %>%
+#   summarise(mean_nbiomass = mean(norm_biomass, na.rm = TRUE)) %>%
+#   ungroup()
+# 
+# 
+# 
+# # STEP 8: Plot observed vs. modeled size spectra
+# plotSpectra(params_v1, power = 0, resource = FALSE) +
+#   geom_point(data = mean_biomass_size_spectra,
+#              aes(x = bin_midpoint, y = mean_nbiomass, colour = Species)) +
+#   scale_x_log10() +
+#   scale_y_log10() +
+#   facet_wrap(~ Species, scales = "free_y") +
+#   theme_bw() +
+#   labs(x = "Weight (g)", y = "Normalized Biomass (g/m² per bin width)")
+# 
+# # ggsave("obs_mod_sizespectra.jpeg")
 
 ```
 
@@ -620,98 +801,98 @@ ggplot(Percentage_depth, aes(x = percent_depth, y = Depth_Stratum)) +
 #combine facet plots
 
 ```{r}
-
-#Standardize species name column across all datasets ---
-
-mean_biomass_size_spectra <- mean_biomass_size_spectra %>%
-  rename(Taxa_updated = Species)
-
-mod_spectra <- plotSpectra(params_v1, power = 0, resource = FALSE, return_data = TRUE) %>%
-  rename(Taxa_updated = Species)
-
-#  Clean names in Percentage_depth ---
-Percentage_depth <- Percentage_depth %>%
-  mutate(
-    Taxa_updated = case_when(
-      Taxa_updated == "Bathylagus spp." ~ "Bathylagus spp",
-      Taxa_updated == "Cyclothone spp." ~ "Cyclothone spp",
-      Taxa_updated == "Sergestes spp." ~ "Sergestes spp",
-      TRUE ~ Taxa_updated
-    ),
-    Depth_Stratum = factor(Depth_Stratum, levels = c("E", "UM", "LM")),
-    Depth_Stratum = as.character(Depth_Stratum)  # Avoid list-columns
-  )
-
-#  Loop to create individual plots per species ---
-# Identify species that exist in all 3 datasets
-species_list <- intersect(
-  intersect(unique(mean_biomass_size_spectra$Taxa_updated),
-            unique(mod_spectra$Taxa_updated)),
-  unique(Percentage_depth$Taxa_updated)
-)
-
-combined_plots <- list()
-
-for (sp in species_list) {
-  # Filter species data
-  obs_sp <- filter(mean_biomass_size_spectra, Taxa_updated == sp)
-  mod_sp <- filter(mod_spectra, Taxa_updated == sp)
-  depth_sp_data <- filter(Percentage_depth, Taxa_updated == sp)
-
-  if (nrow(depth_sp_data) == 0) next  # Skip if no depth data
-
-  # Ensure all 3 depth layers are present (for consistent inset layout)
-  depth_levels <- c("E", "UM", "LM")
-  depth_sp_data <- depth_sp_data %>%
-    complete(Depth_Stratum = depth_levels, fill = list(percent_depth = 0))
-
-  # Create main spectra plot (modeled + observed)
-  main_sp <- ggplot() +
-    geom_line(data = mod_sp, aes(x = w, y = value), color = "black") +
-    geom_point(data = obs_sp, aes(x = bin_midpoint, y = mean_nbiomass), color = "darkblue") +
-    scale_x_log10() +
-    scale_y_log10() +
-    theme_bw() +
-    labs(x = NULL, y = NULL) +
-    ggtitle(sp) +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),  # Title font
-      axis.text = element_text(size = 10),
-      axis.title = element_blank()
-    )
-
- # Create inset bar plot of depth contribution
-inset_sp <- ggplot(depth_sp_data,
-                   aes(x = percent_depth,
-                       y = factor(Depth_Stratum, levels = rev(depth_levels)),
-                       fill = Depth_Stratum)) +
-  geom_bar(stat = "identity", color = "black") +  # <- black outline around bars
-  theme_void() +
-  scale_fill_manual(values = c(
-    "E" = "#a6cee3",    # light blue
-    "UM" = "#1f78b4",  # medium blue
-    "LM" = "#08306b"   # dark blue
-  )) +
-  theme(
-    legend.position = "none"
-  )
-
-combined <- cowplot::ggdraw(main_sp) +
-  cowplot::draw_plot(inset_sp, x = 0.16, y = 0.15, width = 0.2, height = 0.25)
-
-
-  combined_plots[[sp]] <- combined
-}
-
-#  Assemble all plots into final figure ---
-final_plot <- wrap_plots(combined_plots, ncol = 4)
-
-# Display the final combined plot
-print(final_plot)
-
-
-ggsave("Combined_Spectra_with_DepthInset.png", final_plot, width = 12, height = 8, dpi = 300)
-
+# 
+# #Standardize species name column across all datasets ---
+# 
+# mean_biomass_size_spectra <- mean_biomass_size_spectra %>%
+#   rename(Taxa_updated = Species)
+# 
+# mod_spectra <- plotSpectra(params_v1, power = 0, resource = FALSE, return_data = TRUE) %>%
+#   rename(Taxa_updated = Species)
+# 
+# #  Clean names in Percentage_depth ---
+# Percentage_depth <- Percentage_depth %>%
+#   mutate(
+#     Taxa_updated = case_when(
+#       Taxa_updated == "Bathylagus spp." ~ "Bathylagus spp",
+#       Taxa_updated == "Cyclothone spp." ~ "Cyclothone spp",
+#       Taxa_updated == "Sergestes spp." ~ "Sergestes spp",
+#       TRUE ~ Taxa_updated
+#     ),
+#     Depth_Stratum = factor(Depth_Stratum, levels = c("E", "UM", "LM")),
+#     Depth_Stratum = as.character(Depth_Stratum)  # Avoid list-columns
+#   )
+# 
+# #  Loop to create individual plots per species ---
+# # Identify species that exist in all 3 datasets
+# species_list <- intersect(
+#   intersect(unique(mean_biomass_size_spectra$Taxa_updated),
+#             unique(mod_spectra$Taxa_updated)),
+#   unique(Percentage_depth$Taxa_updated)
+# )
+# 
+# combined_plots <- list()
+# 
+# for (sp in species_list) {
+#   # Filter species data
+#   obs_sp <- filter(mean_biomass_size_spectra, Taxa_updated == sp)
+#   mod_sp <- filter(mod_spectra, Taxa_updated == sp)
+#   depth_sp_data <- filter(Percentage_depth, Taxa_updated == sp)
+# 
+#   if (nrow(depth_sp_data) == 0) next  # Skip if no depth data
+# 
+#   # Ensure all 3 depth layers are present (for consistent inset layout)
+#   depth_levels <- c("E", "UM", "LM")
+#   depth_sp_data <- depth_sp_data %>%
+#     complete(Depth_Stratum = depth_levels, fill = list(percent_depth = 0))
+# 
+#   # Create main spectra plot (modeled + observed)
+#   main_sp <- ggplot() +
+#     geom_line(data = mod_sp, aes(x = w, y = value), color = "black") +
+#     geom_point(data = obs_sp, aes(x = bin_midpoint, y = mean_nbiomass), color = "darkblue") +
+#     scale_x_log10() +
+#     scale_y_log10() +
+#     theme_bw() +
+#     labs(x = NULL, y = NULL) +
+#     ggtitle(sp) +
+#     theme(
+#       plot.title = element_text(size = 14, face = "bold"),  # Title font
+#       axis.text = element_text(size = 10),
+#       axis.title = element_blank()
+#     )
+# 
+#  # Create inset bar plot of depth contribution
+# inset_sp <- ggplot(depth_sp_data,
+#                    aes(x = percent_depth,
+#                        y = factor(Depth_Stratum, levels = rev(depth_levels)),
+#                        fill = Depth_Stratum)) +
+#   geom_bar(stat = "identity", color = "black") +  # <- black outline around bars
+#   theme_void() +
+#   scale_fill_manual(values = c(
+#     "E" = "#a6cee3",    # light blue
+#     "UM" = "#1f78b4",  # medium blue
+#     "LM" = "#08306b"   # dark blue
+#   )) +
+#   theme(
+#     legend.position = "none"
+#   )
+# 
+# combined <- cowplot::ggdraw(main_sp) +
+#   cowplot::draw_plot(inset_sp, x = 0.16, y = 0.15, width = 0.2, height = 0.25)
+# 
+# 
+#   combined_plots[[sp]] <- combined
+# }
+# 
+# #  Assemble all plots into final figure ---
+# final_plot <- wrap_plots(combined_plots, ncol = 4)
+# 
+# # Display the final combined plot
+# print(final_plot)
+# 
+# 
+# ggsave("Combined_Spectra_with_DepthInset.png", final_plot, width = 12, height = 8, dpi = 300)
+# 
 
 
 
@@ -1339,11 +1520,18 @@ taxa_colors <- c(
   "P. atlanticum" = micronekton_colors[2],
   "Krill" = micronekton_colors[3],
   "Squid" = micronekton_colors[4],
-  "Crustacean (other)" = micronekton_colors[5],
+  "Crustaceans (other)" = micronekton_colors[5],
   "Fish" = micronekton_colors[6]
 )
 
 #DIC
+DIC_injection_resp_df$higher_taxa <- gsub(
+  pattern = "Crustacean \\(other\\)",
+  replacement = "Crustaceans (other)",
+  x = DIC_injection_resp_df$higher_taxa
+)
+
+
 
 DIC_injection_percent_taxa <- DIC_injection_resp_df %>% 
   select(higher_taxa, Layer, total_DIC_mg) %>% 
@@ -1373,6 +1561,13 @@ DIC_injection_highertaxa_p
 ```
 
 ```{r}
+POC_injection_df$higher_taxa <- gsub(
+  pattern = "Crustacean \\(other\\)",
+  replacement = "Crustaceans (other)",
+  x = POC_injection_df$higher_taxa
+)
+
+
 #POC
 POC_injection_percent_taxa <- POC_injection_df %>% 
   select(higher_taxa, Layer, total_POC_mg) %>% 
@@ -1417,40 +1612,86 @@ ggsave("Fig3_DIC_POC.png", plot = combined_plot, width = 7, height = 5)
 ```
 
 ```{r}
-# Update DIC plot with title and multiline y-axis labels
+# # Update DIC plot with title and multiline y-axis labels
+# DIC_injection_highertaxa_p <- DIC_injection_highertaxa_p +
+#   labs(title = expression(DIC[inject])) +
+#   scale_y_discrete(labels = c("Epi" = "Epipelagic", 
+#                               "Umeso" = "Upper\nmesopelagic", 
+#                               "Lmeso" = "Lower\nmesopelagic")) +
+#   theme(
+#     axis.text.y = element_text(angle = 90, hjust = 0.5),
+#      axis.title.y = element_blank()
+#   )
+# 
+# # Update POC plot with title, multiline y-axis labels, and remove y-axis title
+# POC_injection_highertaxa_p <- POC_injection_highertaxa_p +
+#   labs(title = expression(POC[inject]))+
+#   scale_y_discrete(labels = c("Epi" = "Epipelagic", 
+#                               "Umeso" = "Upper\nmesopelagic", 
+#                               "Lmeso" = "Lower\nmesopelagic")) +
+#   theme(
+#     axis.text.y = element_blank(),
+#     axis.title.y = element_blank()
+#   )
+# 
+# # Combine and save
+# combined_plot <- DIC_injection_highertaxa_p + POC_injection_highertaxa_p +
+#   plot_layout(guides = "collect", ncol = 2) &
+#  # plot_annotation(tag_levels = 'A') & 
+#   theme(legend.position = "bottom")
+# 
+# combined_plot
+# ggsave("Fig3_DIC_POC.png", plot = combined_plot, width = 7, height = 5)
+
+
+
+```
+```{r}
+# Update DIC plot with title, superscript x-axis title, larger axis text, and multiline y-axis labels
 DIC_injection_highertaxa_p <- DIC_injection_highertaxa_p +
-  labs(title = expression(DIC[inject])) +
-  scale_y_discrete(labels = c("Epi" = "Epipelagic", 
-                              "Umeso" = "Upper\nmesopelagic", 
-                              "Lmeso" = "Lower\nmesopelagic")) +
+  labs(
+    title = expression(DIC[inject]),
+    x = expression(mg~C~m^{-2}~d^{-1})  # superscript units
+  ) +
+  scale_y_discrete(labels = c(
+    "Epi" = "Epipelagic", 
+    "Umeso" = "Upper\nmeso", 
+    "Lmeso" = "Lower\nmeso"
+  )) +
   theme(
-    axis.text.y = element_text(angle = 90, hjust = 0.5),
-     axis.title.y = element_blank()
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12, angle = 90, hjust = 0.5),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_blank()
   )
 
-# Update POC plot with title, multiline y-axis labels, and remove y-axis title
+# Update POC plot similarly
 POC_injection_highertaxa_p <- POC_injection_highertaxa_p +
-  labs(title = expression(POC[inject]))+
-  scale_y_discrete(labels = c("Epi" = "Epipelagic", 
-                              "Umeso" = "Upper\nmesopelagic", 
-                              "Lmeso" = "Lower\nmesopelagic")) +
+  labs(
+    title = expression(POC[inject]),
+    x = expression(mg~C~m^{-2}~d^{-1})
+  ) +
+  scale_y_discrete(labels = c(
+    "Epi" = "Epipelagic", 
+    "Umeso" = "Upper\nmesopelagic", 
+    "Lmeso" = "Lower\nmesopelagic"
+  )) +
   theme(
+    axis.text.x = element_text(size = 12),
     axis.text.y = element_blank(),
+    axis.title.x = element_text(size = 14),
     axis.title.y = element_blank()
   )
 
 # Combine and save
 combined_plot <- DIC_injection_highertaxa_p + POC_injection_highertaxa_p +
   plot_layout(guides = "collect", ncol = 2) &
- # plot_annotation(tag_levels = 'A') & 
   theme(legend.position = "bottom")
 
-combined_plot
 ggsave("Fig3_DIC_POC.png", plot = combined_plot, width = 7, height = 5)
 
-
-
 ```
+
 
 
 ## Apply microb remin to POC

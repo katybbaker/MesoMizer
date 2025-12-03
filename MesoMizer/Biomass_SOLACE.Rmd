@@ -51,7 +51,7 @@ print(polygon_m3)
 
 ```{r}
 catchcomp_total1 <- catchcomp_total %>% 
-  dplyr::select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated,Taxa_PLAOS,Abd_Std_nosm3_sp,
+  dplyr::select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated,Taxa_PLAOS,Abd_Std_nosm3_sp, nos, weight_g, av_weight,
                 Weight_Std_gm3_sp)  %>% 
   mutate(Depth_Stratum = case_when(Depth_Stratum == "Lmeso" ~ "LM",
                                           Depth_Stratum == "Meso" ~ "UM",
@@ -157,8 +157,10 @@ catchcomp_total1 <- catchcomp_total1 %>%
 ```{r}
 Mesomizer_species <- catchcomp_total1 %>% 
   filter(Taxa_updated %in% c("Euphausia similis", "Thysannoessa macura", "Euphausia tricantha", "Gennadas spp.","Sergestes spp.", "Themisto spp", "Electrona antarctica", "Lampanyctus australis", "Nannobrachium achirus", "Cyclothone spp.", "Bathylagus spp.", "Cranchidae", "Chaetognath", "Gymnosomata", "Pyrosoma atlanticum", "Salpa thompsoni", "Atolla wyvillei", "Periphylla Periphylla", "Omnivorous copepod", "Carnivorous copepod"))%>% 
-filter(Site == "SOTS")
+filter(Site == "SOTS") %>% 
+  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp, nos, weight_g, av_weight, Abd_Std_nosm3_sp)
 
+write.csv(Mesomizer_species, "SOLACE_biomass_filtered.csv")
 ```
 
 
@@ -168,26 +170,9 @@ filter(Site == "SOTS")
 
 ```{r}
 
-Percentage_depth <- Mesomizer_species %>% 
-  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
-  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
-  summarise(StdWt = sum(Weight_Std_gm3_sp)) %>% #one weight per species per deployment
-  ungroup() %>%
-  group_by(Taxa_updated, Depth_Stratum, Site) %>% 
-  mutate(av_weight = mean(StdWt)) %>% 
-  ungroup() %>% 
-  select(Depth_Stratum, Taxa_updated, av_weight) %>% 
-  unique() %>% 
-  group_by(Taxa_updated) %>% 
-  mutate(total_weight = sum(av_weight)) %>% 
-  mutate(percent_depth = av_weight/total_weight*100) %>% 
-  select(Depth_Stratum, Taxa_updated, percent_depth)
-
-write.csv(Percentage_depth, "Percentage_depth.csv")
 
 # Find biomass per species, depth & site
 Biomass_deployment <- Mesomizer_species %>%
-  select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
   group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
   summarise(StdWt = sum(Weight_Std_gm3_sp)) %>% #one weight per species per deployment
   ungroup() %>%
@@ -210,6 +195,25 @@ Biomass_deployment <- Mesomizer_species %>%
   )
 
 write.csv(Biomass_deployment, "Biomass_av_wc.csv")
+
+
+Percentage_depth <- Mesomizer_species %>% 
+  #select(Site, daylight, Depth_Stratum, Deployment, Taxa_updated, Weight_Std_gm3_sp) %>%
+  group_by(Site, daylight, Depth_Stratum, Deployment, Taxa_updated) %>%
+  summarise(StdWt = sum(Weight_Std_gm3_sp)) %>% #one weight per species per deployment
+  ungroup() %>%
+  group_by(Taxa_updated, Depth_Stratum, Site) %>% 
+  mutate(av_weight = mean(StdWt)) %>% 
+  ungroup() %>% 
+  select(Depth_Stratum, Taxa_updated, av_weight) %>% 
+  unique() %>% 
+  group_by(Taxa_updated) %>% 
+  mutate(total_weight = sum(av_weight)) %>% 
+  mutate(percent_depth = av_weight/total_weight*100) %>% 
+  select(Depth_Stratum, Taxa_updated, percent_depth)
+
+write.csv(Percentage_depth, "Percentage_depth.csv")
+
 
 # Find biomass per species, depth & site
 abundance_deployment <- Mesomizer_species %>%

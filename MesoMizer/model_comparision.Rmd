@@ -114,22 +114,55 @@ taxa_colors <- c(
   "Crustacean (other)" = micronekton_colors[5],
   "Fish" = micronekton_colors[6]
 )
+# 
+# model_combined$Species <- factor(model_combined$Species, levels = names(taxa_colors))
+# 
+# combined_plot <- ggplot(model_combined, aes(x = mod_type, y = mgC_m.2_d, fill = Species)) +
+#   geom_bar(stat = "identity", position = "stack") +
+#   scale_fill_manual(values = taxa_colors) +
+#   labs(x = "Model Type", y = "mg C m⁻² d⁻¹", fill = "Species") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 0))
+# 
+# combined_plot
+# 
+# ggsave("Fig7_empiracle_v_mechanistic.png", plot = combined_plot, width = 7, height = 5)
+```
 
-model_combined$Species <- factor(model_combined$Species, levels = names(taxa_colors))
-
+```{r}
 combined_plot <- ggplot(model_combined, aes(x = mod_type, y = mgC_m.2_d, fill = Species)) +
   geom_bar(stat = "identity", position = "stack") +
-  scale_fill_manual(values = taxa_colors) +
-  labs(x = "Model Type", y = "mg C m⁻² d⁻¹", fill = "Species") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 0))
+  scale_fill_manual(
+    values = taxa_colors,
+    labels = function(x) gsub("Crustacean \\(other\\)", "Crustaceans (other)", x)  # Change label
+  ) +
+  labs(x = "Model Type", y = "mg C m⁻² d⁻¹", fill = "Group") +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 0, size = 14),
+    axis.text.y = element_text(size = 14),
+    axis.title = element_text(size = 16),
+    axis.title.x = element_text(margin = margin(t = 10)),  # Adds top margin to separate from axis text
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
 
-combined_plot
 
 ggsave("Fig7_empiracle_v_mechanistic.png", plot = combined_plot, width = 7, height = 5)
+
 ```
 
 
+
+#total
+
+```{r}
+total_export <- model_combined %>% 
+  group_by(mod_type) %>% 
+  mutate(total_mg_C_m2_d = sum(mgC_m.2_d))
+
+
+```
 
 
 
