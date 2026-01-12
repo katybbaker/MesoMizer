@@ -1,0 +1,1016 @@
+---
+title: "Carbon Calculations"
+output: html_document
+date: "2025-12-07"
+---
+
+
+# Carbon outputs
+
+### 1. Respiratory carbon (DIC)
+
+#### 1a. Get metabolic rates per species & size
+
+```{r}
+# read in saved model at steady state (params object - v1 = unfished, fished1 = fishing mesopelagics or fished 2 = fishing krill groups) 
+
+params_v1<-readRDS("~/Library/CloudStorage/OneDrive-UniversityofTasmania/MesoMizer/MesoMizer/params_v1.rds") 
+
+output_path<-"~/Library/CloudStorage/OneDrive-UniversityofTasmania/MesoMizer/MesoMizer/unfished/"
+
+#Get metabolic rate per species and size (g m-2 y-1)
+metabolic_rates <- metab(params_v1)
+
+# Convert metabolic rates array to long-format data frame
+metabolic_rates_df <- melt(metabolic_rates, varnames = c("Species", "Size"), value.name = "Metabolic_Rate")
+
+# Plot with log scale for size
+ggplot(metabolic_rates_df, aes(x = Size, y = Metabolic_Rate, color = as.factor(Species))) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Metabolic Rate per Size for Each Species",
+       x = "Size (w)",
+       y = "Metabolic Rate",
+       color = "Species") +
+  theme_minimal()
+```
+
+### 1.b incorporate abundances (n_initial)
+
+```{r}
+# Function to calculate respired carbon per species and size
+respired_carbon_per_species <- function(params_v1, 
+                                        n = params_v1@initial_n, 
+                                        n_other = params_v1@initial_n_other) {
+    # Get metabolic rates per species and size (g m-2 y-1)
+    metabolic_rates <- metab(params_v1)
+    
+    # Multiply metabolic rates by abundance for each species and size
+    respired_carbon <- sweep(metabolic_rates * n, 2, params_v1@dw, "*", check.margin = FALSE)
+    
+    # Return the respired carbon per species and size
+    return(respired_carbon)
+}
+
+# Call the function to get respired carbon
+respired_carbon <- respired_carbon_per_species(params_v1)
+
+species_names <- rownames(params_v1@species_params)
+size_bins <- params_v1@w
+
+# Extract the respiration matrix
+#respiration_matrix <- respired_carbon$respired_carbon
+
+# Assign the correct column names (size bins)
+colnames(respired_carbon) <- size_bins
+
+# Convert to a data frame and add species names
+respiration_df <- as.data.frame(respired_carbon)
+respiration_df$Species <- rownames(respired_carbon)
+
+# Reshape the data to long format
+
+respiration_long <- respiration_df %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "respiration_production") %>%
+  mutate(Size = as.numeric(Size))
+
+# View the final data frame
+print(respiration_long)
+
+# Plot using ggplot2 with log scale for size
+RC_p <- ggplot(respiration_long, aes(x = Size, y = respiration_production, color = Species)) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Respired weight (g) per Size for Each Species",
+       x = "Size (g)",
+       y = "g C m-2 h-1",
+       color = "Species") +
+  theme_minimal()
+
+
+```
+
+
+## 1c. Convert Mizer metabolic rate (g y-1) to respiratory oxygen uptake (L h-1) then respired carbon (g C m-2 h-1)
+
+
+```{r}
+
+#RC = RO * RQ * (12/22.4) #Kwong et al. 2020
+    #RC: respiratory carbon (g C ind-1 h-1); 
+    #RO: respiratory oxygen uptake (L O2 ind-1 h-1); 
+    #RQ: respiratory quotient (unit-less);
+    #12: molar weight of carbon (g mol-1); 
+    #22.4: molar volume of an ideal gas at standard pressure (mol L-1)
+    #TD = time at depth
+
+#to convert metabolic rate (respiration_production) to RO - must convert to energy (KJ) using these assumptions:
+
+# Constants ----- include reference
+energy_content <- 23.7         # kJ per gram based on a mixed diet - could make this more dynamic to reflect feeding types
+oxygen_conversion <- 19.4      # kJ per liter of O2
+hours_per_year <- 8760         # Number of hours in a year
+
+
+respired_carbon_df <- respiration_long %>% 
+  mutate(oxygen_uptake_liters_h = respiration_production * energy_content/oxygen_conversion/hours_per_year)
+
+# Define the conversion factor from oxygen uptake to carbon
+oxygen_to_carbon <- 12 / 22.4  # This is the factor (12/22.4) to convert oxygen to carbon
+
+# Add RQ values to the respired_carbon_df
+respired_carbon_df$RQ <- params_v1@species_params$RQ[match(respired_carbon_df$Species, params_v1@species_params$species)]
+
+# View the updated dataframe
+head(respired_carbon_df)
+
+
+respired_carbon_df <- respired_carbon_df %>% 
+  mutate(respired_carbon = oxygen_uptake_liters_h * RQ * oxygen_to_carbon)
+
+
+
+
+```
+
+
+
+#### plot
+
+```{r}
+# Plot using ggplot2 with log scale for size
+RC_p <- ggplot(respired_carbon_df, aes(x = Size, y = respired_carbon, color = Species)) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Respired Carbon per Size for Each Species",
+       x = "Size (g)",
+       y = "g C m-2 h-1",
+       color = "Species") +
+  theme_minimal()
+
+# Display the plot
+print(RC_p)
+
+#ggsave(paste0(output_path,"RC.png"), plot = RC_p)
+
+```
+
+
+# 2. Fecal Carbon (POC)
+
+## 2a. Extract feces production per species and size
+
+```{r}
+
+detritus_production_per_species <- function(params_v1, n = params_v1@initial_n, # in MizerShelf, detritus production includes feces, decomposing carrion and external. For now we only want to extract feces, but we'll keep the other functions in at this stage.
+                                            n_other = params_v1@initial_n_other, #resource?
+                                            rates = getRates(params_v1)) {
+    # Calculate the consumption for each species
+    consumption <- sweep((1 - rates$feeding_level) * rates$encounter * n, 2,
+                         params_v1@dw, "*", check.margin = FALSE)
+    
+    # Calculate the feces production for each species
+    feces <- sweep(consumption, 1, (1 - params_v1@species_params$alpha), "*", 
+                   check.margin = FALSE)
+    
+    # Calculate the carrion decomposition
+    carrion <- params_v1@other_params$carrion$decompose * n_other$carrion
+    
+    # Create a list to store detritus production per species
+    detritus_per_species <- list(
+        external = params_v1@other_params$detritus$external,
+        feces = feces,
+        carrion = carrion
+    )
+    
+    return(detritus_per_species)
+}
+
+
+
+detritus <- detritus_production_per_species(params_v1)
+
+species_names <- rownames(params_v1@species_params)
+size_bins <- params_v1@w
+
+# Extract the feces matrix
+feces_matrix <- detritus$feces
+
+# Assign the correct column names (size bins)
+colnames(feces_matrix) <- size_bins
+
+# Convert to a data frame and add species names
+feces_df <- as.data.frame(feces_matrix)
+feces_df$Species <- rownames(feces_matrix)
+
+# Reshape the data to long format
+
+feces_long <- feces_df %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "Feces_production") %>%
+  mutate(Size = as.numeric(Size))
+
+# View the final data frame
+print(feces_long)
+
+
+
+```
+
+
+
+## 2b. Convert feces (g m-2 y-1) to (g m-2 C h-1)
+
+
+```{r}
+
+# Extract the p_FC (carbon % per fecal pellet) parameter from params_v1
+p_FC <- params_v1@species_params$p_FC
+
+# Create a data frame with species and their corresponding p_FC values
+p_FC_df <- data.frame(Species = rownames(params_v1@species_params), p_FC = p_FC)
+
+# Merge the p_FC values into the feces_long dataframe
+feces_long <- merge(feces_long, p_FC_df, by = "Species", all.x = TRUE)
+
+
+# Calculate Fecal Carbon (FC)
+feces_df <- feces_long %>%
+  mutate(Fecal_Carbon = Feces_production *p_FC/hours_per_year,
+          Fecal_Carbon_mg = Fecal_Carbon * 1000)  # Convert to milligrams)  
+
+
+feces_p <- ggplot(feces_df, aes(x = Size, y = Fecal_Carbon_mg, color = as.factor(Species))) +
+  geom_line() +
+  scale_y_log10()+
+  scale_x_log10() +
+  labs(title = "Fecal Carbon per Size for Each Species",
+       x = "Size (g)",
+       y = "mg C m-2 h-1",
+       color = "Species") +
+  theme_minimal()
+
+feces_p
+
+#ggsave(paste0(output_path,"FC.png"), plot = feces_p,  width = 7, height = 5)
+
+```
+
+
+
+# 3. Carrion carbon (POC)
+
+## 3a. Approach 1: take carrion from proportion of detritus. However, this includes a degradation term, so we may miss "fresh" carrion. Also, if used with degradation term we may not need to apply remineralization rates later... i.e. this "POC" is actually "DIC" and remains suspended.
+
+```{r}
+#approach 1 - take carrion from proportion of detritus
+
+# # Extract the feces matrix
+# carrion_matrix <- detritus$carrion
+# 
+# # Assign the correct column names (size bins)
+# colnames(carrion_matrix) <- size_bins
+# 
+# # Convert to a data frame and add species names
+# carrion_df <- as.data.frame(carrion_matrix)
+# carrion_df$Species <- rownames(carrion_matrix)
+# 
+# # Reshape the data to long format
+# 
+# carrion_long <- carrion_df %>%
+#   pivot_longer(cols = -Species, names_to = "Size", values_to = "carrion_production") %>%
+#   mutate(Size = as.numeric(Size))
+# 
+# # View the final data frame
+# print(carrion_long)
+
+
+
+```
+
+## 3b. Approach 2: manually extract species specific external mortality rates and multiply by weight. However, extmort is constant so size is not taken into account.
+
+
+```{r}
+# Function to calculate respired carbon per species and size
+carcass_carbon_per_species <- function(params_v1, 
+                                        n = params_v1@initial_n, 
+                                        n_other = params_v1@initial_n_other) {
+    # Get metabolic rates per species and size (g m-2 y-1)
+    ext_mort_rates <- getExtMort(params_v1)
+    
+    # Multiply metabolic rates by abundance for each species and size
+    ext_mort_rates <- sweep(ext_mort_rates * n, 2, params_v1@dw, "*", check.margin = FALSE)
+    
+    # Return the respired carbon per species and size
+    return(ext_mort_rates)
+}
+
+# Call the function to get respired carbon
+ext_mort_rates <- carcass_carbon_per_species(params_v1)
+
+species_names <- rownames(params_v1@species_params)
+size_bins <- params_v1@w
+
+
+
+# Assign the correct column names (size bins)
+colnames(ext_mort_rates) <- size_bins
+
+# Convert to a data frame and add species names
+ext_mort_rates_df <- as.data.frame(ext_mort_rates)
+ext_mort_rates_df$Species <- rownames(ext_mort_rates)
+
+# Reshape the data to long format
+
+ext_mort_rates_long <- ext_mort_rates_df %>%
+  pivot_longer(cols = -Species, names_to = "Size", values_to = "ext_mort_rates") %>%
+  mutate(Size = as.numeric(Size))
+
+# View the final data frame
+print(ext_mort_rates_long)
+
+# Plot using ggplot2 with log scale for size
+CC_p <- ggplot(ext_mort_rates_long, aes(x = Size, y = ext_mort_rates, color = Species)) +
+  geom_line() +
+  scale_x_log10() +
+  labs(title = "Carcass weight (g) per Size for Each Species",
+       x = "Size (g)",
+       y = "g C m-2 y-1",
+       color = "Species") +
+  theme_minimal()
+
+```
+
+
+```{r}
+
+
+carcass_carbon_df <- ext_mort_rates_long %>% 
+  mutate(g_C = ext_mort_rates * 0.4) %>% # change this to species specific carbon content (or leave as assumption - Steinberg et al. 2017?)
+  mutate(carcass_C = g_C * 0.1713287/hours_per_year) #constant taken from MizerShelf - proportion of ext_mort that produces carrion (i.e. some of the external mortality will not contribute to carrion production due to consumption from non-modeled species like sea birds)
+
+
+carrion_p <- ggplot(carcass_carbon_df, aes(x = Size, y = carcass_C, color = as.factor(Species))) +
+  geom_line() +
+  scale_y_log10()+
+  scale_x_log10() +
+  labs(title = "Carcass Carbon per Size for Each Species",
+       x = "Size (g)",
+       y = "g C m-2 h-1",
+       color = "Species") +
+  theme_minimal()
+
+carrion_p
+
+#ggsave(paste0(output_path,"CC.png"), plot = carrion_p)
+
+```
+
+
+
+## 3c. Extract external contribution to carrion production (MizerShelf). Ideal approach, but unable to partition natural mortality atm.
+
+```{r}
+
+# #approach 3: extract external contribution to carrion production
+# 
+# carrion_production_per_species <- function(params_v1, n = params_v1@initial_n,
+#                                            rates = getRates(params_v1)) {
+#     # Calculate natural mortality contribution to carrion per species
+#     mu_b_contribution <- (params_v1@mu_b * n) * (params_v1@w * params_v1@dw) *
+#                          params_v1@other_params$carrion$ext_prop
+# 
+#     # Calculate gear mortality contribution to carrion per species
+#     gear_mort_contribution <- (gearMort(params_v1, rates$f_mort) * n) *
+#                               (params_v1@w * params_v1@dw)
+# 
+#     # Calculate discards contribution to carrion per species
+#     discards_contribution <- ((rates$f_mort * n) * (params_v1@w * params_v1@dw)) *
+#                              params_v1@species_params$discard
+# 
+#     # Create a list to store carrion production per species
+#     carrion_per_species <- list(
+#         mu_b = mu_b_contribution,
+#         gear_mort = gear_mort_contribution,
+#         discards = discards_contribution
+#     )
+# 
+#     return(carrion_per_species)
+# }
+# 
+# # Assume params is already defined and get carrion production per species
+# carrion <- carrion_production_per_species(params_v1)
+# 
+# carrion
+# 
+# getCarrionProduction(params_v1)
+
+
+```
+
+
+# 4. Carbon pools
+
+## 4a. combine carbon products dataframe
+
+
+```{r}
+
+# First, merge respired_carbon_long and feces_df
+combined_df1 <- merge(respired_carbon_df, feces_df, by = c("Species", "Size"))
+
+# Then, merge the result with carcass_carbon_df
+combined_df <- merge(combined_df1, carcass_carbon_df, by = c("Species", "Size"))
+
+# View the combined dataframe
+head(combined_df)
+
+```
+
+## 4b. add in DVM info to split carbon products up by depth layer - based on vertical_migration_array
+
+```{r}
+
+vertical_migration_array<-params_v1@other_params$other$vertical_migration
+
+# Convert vertical_migration_array to a dataframe
+vertical_migration_df <- as.data.frame(vertical_migration_array)
+
+# Transpose the dataframe so species names are in a column
+vertical_migration_df <- t(vertical_migration_df)
+
+# Convert it back to a dataframe and add row names as a column
+vertical_migration_df <- as.data.frame(vertical_migration_df)
+vertical_migration_df$Species <- rownames(vertical_migration_df)
+rownames(vertical_migration_df) <- NULL
+
+
+# Rename the columns for easier merging
+colnames(vertical_migration_df) <- c("P_Epi", "P_Umeso", "P_Lmeso", "Species")
+
+
+# Split the Species column into species name and size using strsplit
+split_values <- strsplit(as.character(vertical_migration_df$Species), "(?<=\\D)\\.(?=\\d)", perl = TRUE)
+
+# Extract the species name
+vertical_migration_df$Species <- sapply(split_values, `[`, 1)
+
+# Extract the size
+vertical_migration_df$Size <- sapply(split_values, `[`, 2)
+vertical_migration_df <- vertical_migration_df %>% 
+  select(-Size)
+
+
+# Merge the vertical migration data with your combined dataframe
+final_df <- merge(combined_df, vertical_migration_df, by = c("Species"), all.x = TRUE) #may need to make this more dynamic and incorporate DVM based on size - to be discussed later
+
+final_df <- final_df %>% 
+  unique()
+# View the final dataframe
+head(final_df)
+
+```
+
+
+
+## 4c. Create Carbon pools dataframe
+
+```{r}
+
+DIC_POC <- final_df %>% 
+rowwise() %>%
+  mutate(total_DIC = sum(respired_carbon),
+         total_POC = sum(Fecal_Carbon, carcass_C)) %>%
+  ungroup()
+
+
+carbon_pools <- DIC_POC %>% 
+  select(Species, total_DIC, total_POC, P_Epi, P_Umeso, P_Lmeso) %>% 
+  group_by(Species) %>% 
+  mutate(g_POC_m2_h = sum(total_POC),
+         g_DIC_m2_h = sum(total_DIC)) %>% 
+  ungroup() %>% 
+  select(Species, g_POC_m2_h, g_DIC_m2_h,P_Epi, P_Umeso, P_Lmeso) %>% 
+  unique() %>% 
+    mutate(DIC_Epi = g_DIC_m2_h *15.8* P_Epi, #based on % of species specific biomass per layer and multiplied by daylight at SOTS during SOLACE (15.8 h)
+         DIC_Umeso = g_DIC_m2_h *15.8* P_Umeso,
+         DIC_Lmeso = g_DIC_m2_h *15.8* P_Lmeso,
+         POC_Epi = g_POC_m2_h *15.8* P_Epi,
+         POC_Umeso = g_POC_m2_h *15.8* P_Umeso,
+         POC_Lmeso = g_POC_m2_h *15.8* P_Lmeso)
+
+
+
+```
+
+###Group by higher taxonomic level
+
+```{r}
+
+
+# Add the higher_taxa column based on Species
+carbon_pools <- carbon_pools %>%
+  mutate(higher_taxa = case_when(
+    Species == "Atolla wyvillei" ~ "Gelatinous (other)",
+    Species == "Gymnosomata" ~ "Gelatinous (other)",
+    Species == "Chaetognath" ~ "Gelatinous (other)",
+    Species == "Cranchidae" ~ "Squid",
+    Species == "Pyrosoma atlanticum" ~ "P. atlanticum",
+    Species == "Euphausia similis" ~ "Krill",
+    Species == "Thysannoessa macura" ~ "Krill",
+    Species == "Bathylagus spp" ~ "Fish",
+    Species == "Cyclothone spp" ~ "Fish",
+    Species == "Lampanyctus australis" ~ "Fish",
+    Species == "Nannobrachium achirus" ~ "Fish",
+    Species == "Sergestes spp" ~ "Crustacean (other)",
+    Species == "Themisto spp" ~ "Crustacean (other)",
+    TRUE ~ NA_character_ # Assign NA for any unmatched species
+  ))
+
+# View the updated dataframe
+print(carbon_pools)
+
+```
+
+
+## 4d. Plot respired DIC 
+
+```{r}
+
+# Gather the data into a long format for plotting
+DIC_injection_resp_df <- carbon_pools %>%
+  select(Species, DIC_Epi, DIC_Umeso, DIC_Lmeso, higher_taxa) %>%
+  pivot_longer(cols = c(DIC_Epi, DIC_Umeso, DIC_Lmeso), 
+               names_to = "Layer", 
+               values_to = "DIC") %>%
+  mutate(
+    Layer = recode(Layer,
+                   "DIC_Epi" = "Epi",
+                   "DIC_Umeso" = "Umeso",
+                   "DIC_Lmeso" = "Lmeso"),
+    Layer = factor(Layer, levels = c("Lmeso", "Umeso", "Epi")),
+    total_DIC_mg = DIC * 1000
+  )
+
+
+# Create the horizontal bar plot
+DIC_injection_resp_p <- ggplot(DIC_injection_resp_df, aes(x = total_DIC_mg, y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "mg C m-2 d-1", y = "Depth Stratum") +
+  xlim(0,10)+
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(legend.title = element_blank())
+
+DIC_injection_resp_p
+
+ggsave(paste0(output_path,"Supp_fig8_DICpertaxa.png"), plot = DIC_injection_resp_p, width = 7, height = 5)
+```
+
+
+```{r}
+DIC_injection_total <- DIC_injection_resp_df %>% 
+  group_by(Layer) %>% 
+  mutate(mg_C_m2_d_layer = sum(total_DIC_mg),
+         POC_DIC = "DIC_inject") %>% 
+  ungroup() %>% 
+  select(Layer, mg_C_m2_d_layer, POC_DIC) %>% 
+  unique() 
+```
+
+
+
+## 4e. Plot POC (fecal & carcass carbon)
+
+```{r}
+
+
+# Gather the data into a long format for plotting
+POC_injection_df <- carbon_pools %>%
+  select(Species, POC_Epi, POC_Umeso, POC_Lmeso, higher_taxa) %>%
+  pivot_longer(cols = c(POC_Epi, POC_Umeso, POC_Lmeso), 
+               names_to = "Layer", 
+               values_to = "POC") %>%
+  mutate(Layer = factor(Layer, levels = c("POC_Lmeso", "POC_Umeso", "POC_Epi")),
+    Layer = recode(Layer,
+                   "POC_Epi" = "Epi",
+                   "POC_Umeso" = "Umeso",
+                   "POC_Lmeso" = "Lmeso"),
+    Layer = factor(Layer, levels = c("Lmeso", "Umeso", "Epi")),
+    total_POC_mg = POC * 1000
+  )
+
+# Create the horizontal bar plot
+POC_injection_p <- ggplot(POC_injection_df , aes(x = total_POC_mg, y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "mg C m-2 d-1", y = "Depth Stratum") +
+  xlim(0,10)+
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(legend.title = element_blank())
+
+POC_injection_p
+
+ggsave(paste0(output_path,"Supp_fig9_POCpertaxa.png"), plot = POC_injection_p, width = 7, height = 5)
+
+
+```
+
+#plot higher_taxa carbon pools (Figure 3)
+
+```{r}
+
+#colors (to match Baker et al., 2025)
+
+micronekton_colors <- plasma(6, begin = 0, end = 0.8)   
+
+
+# Combine micronekton and mesozooplankton colors
+taxa_colors <- c(
+  "Gelatinous (other)" = micronekton_colors[1],
+  "P. atlanticum" = micronekton_colors[2],
+  "Krill" = micronekton_colors[3],
+  "Squid" = micronekton_colors[4],
+  "Crustaceans (other)" = micronekton_colors[5],
+  "Fish" = micronekton_colors[6]
+)
+
+#DIC
+DIC_injection_resp_df$higher_taxa <- gsub(
+  pattern = "Crustacean \\(other\\)",
+  replacement = "Crustaceans (other)",
+  x = DIC_injection_resp_df$higher_taxa
+)
+
+
+
+DIC_injection_percent_taxa <- DIC_injection_resp_df %>% 
+  select(higher_taxa, Layer, total_DIC_mg) %>% 
+  group_by(higher_taxa, Layer) %>% 
+  mutate(total_DIC_mg = sum(total_DIC_mg)) %>% 
+  ungroup() %>% 
+  unique() %>% 
+  group_by(Layer) %>% 
+  mutate(DIC_layer = sum(total_DIC_mg)) %>% 
+  ungroup() %>% 
+  mutate(percent_cont = total_DIC_mg/DIC_layer)
+
+write.csv(DIC_injection_percent_taxa, paste0(output_path,"DIC_inject_percent_taxa.csv"))
+
+# Create the horizontal bar plot
+DIC_injection_highertaxa_p <- ggplot(DIC_injection_resp_df, aes(x = total_DIC_mg, y = Layer, fill = higher_taxa)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "mg C m-2 d-1", y = "Depth Stratum") +
+  xlim(0,10)+
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  scale_fill_manual(values = taxa_colors, name = NULL)+
+  theme(legend.title = element_blank())
+
+DIC_injection_highertaxa_p
+
+```
+
+```{r}
+POC_injection_df$higher_taxa <- gsub(
+  pattern = "Crustacean \\(other\\)",
+  replacement = "Crustaceans (other)",
+  x = POC_injection_df$higher_taxa
+)
+
+
+#POC
+POC_injection_percent_taxa <- POC_injection_df %>% 
+  select(higher_taxa, Layer, total_POC_mg) %>% 
+  group_by(higher_taxa, Layer) %>% 
+  mutate(total_POC_mg = sum(total_POC_mg)) %>% 
+  ungroup() %>% 
+  unique() %>% 
+  group_by(Layer) %>% 
+  mutate(POC_layer = sum(total_POC_mg)) %>% 
+  ungroup() %>% 
+  mutate(percent_cont = total_POC_mg/POC_layer)
+
+write.csv(POC_injection_percent_taxa, paste0(output_path,"POC_inject_percent_taxa.csv"))
+
+# Create the horizontal bar plot
+POC_injection_highertaxa_p <- ggplot(POC_injection_df , aes(x = total_POC_mg, y = Layer, fill = higher_taxa)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "mg C m-2 d-1", y = "Depth Stratum") +
+  xlim(0,10)+
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  scale_fill_manual(values = taxa_colors, name = NULL)+
+  theme(legend.title = element_blank())
+
+POC_injection_highertaxa_p
+
+```
+
+
+```{r}
+# Combine the two plots side by side with a shared legend below
+combined_plot <- DIC_injection_highertaxa_p + POC_injection_highertaxa_p +
+  plot_layout(guides = "collect", ncol = 2) + # Arrange plots in 2 columns and collect the legend
+  plot_annotation(tag_levels = 'A') & # Add tags for panels
+  theme(legend.position = "bottom") # Place the legend below
+
+# Display the combined plot
+combined_plot
+
+ggsave(paste0(output_path,"Fig3_DIC_POC_.png"), plot = combined_plot, width = 7, height = 5)
+
+```
+
+```{r}
+# # Update DIC plot with title and multiline y-axis labels
+# DIC_injection_highertaxa_p <- DIC_injection_highertaxa_p +
+#   labs(title = expression(DIC[inject])) +
+#   scale_y_discrete(labels = c("Epi" = "Epipelagic", 
+#                               "Umeso" = "Upper\nmesopelagic", 
+#                               "Lmeso" = "Lower\nmesopelagic")) +
+#   theme(
+#     axis.text.y = element_text(angle = 90, hjust = 0.5),
+#      axis.title.y = element_blank()
+#   )
+# 
+# # Update POC plot with title, multiline y-axis labels, and remove y-axis title
+# POC_injection_highertaxa_p <- POC_injection_highertaxa_p +
+#   labs(title = expression(POC[inject]))+
+#   scale_y_discrete(labels = c("Epi" = "Epipelagic", 
+#                               "Umeso" = "Upper\nmesopelagic", 
+#                               "Lmeso" = "Lower\nmesopelagic")) +
+#   theme(
+#     axis.text.y = element_blank(),
+#     axis.title.y = element_blank()
+#   )
+# 
+# # Combine and save
+# combined_plot <- DIC_injection_highertaxa_p + POC_injection_highertaxa_p +
+#   plot_layout(guides = "collect", ncol = 2) &
+#  # plot_annotation(tag_levels = 'A') & 
+#   theme(legend.position = "bottom")
+# 
+# combined_plot
+# ggsave("Fig3_DIC_POC.png", plot = combined_plot, width = 7, height = 5)
+
+
+
+```
+```{r}
+# Update DIC plot with title, superscript x-axis title, larger axis text, and multiline y-axis labels
+DIC_injection_highertaxa_p <- DIC_injection_highertaxa_p +
+  labs(
+    title = expression(DIC[inject]),
+    x = expression(mg~C~m^{-2}~d^{-1})  # superscript units
+  ) +
+  scale_y_discrete(labels = c(
+    "Epi" = "Epipelagic", 
+    "Umeso" = "Upper\nmeso", 
+    "Lmeso" = "Lower\nmeso"
+  )) +
+  theme(
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12, angle = 90, hjust = 0.5),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_blank()
+  )
+
+# Update POC plot similarly
+POC_injection_highertaxa_p <- POC_injection_highertaxa_p +
+  labs(
+    title = expression(POC[inject]),
+    x = expression(mg~C~m^{-2}~d^{-1})
+  ) +
+  scale_y_discrete(labels = c(
+    "Epi" = "Epipelagic", 
+    "Umeso" = "Upper\nmesopelagic", 
+    "Lmeso" = "Lower\nmesopelagic"
+  )) +
+  theme(
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_blank(),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_blank()
+  )
+
+# Combine and save
+combined_plot <- DIC_injection_highertaxa_p + POC_injection_highertaxa_p +
+  plot_layout(guides = "collect", ncol = 2) &
+  theme(legend.position = "bottom")
+
+ggsave(paste0(output_path,"Fig3_DIC_POC.png"), plot = combined_plot, width = 7, height = 5)
+
+```
+
+
+
+## Apply microb remin to POC
+
+```{r}
+
+POC_mg_df <- POC_injection_df %>% 
+  select(Layer, total_POC_mg) %>% 
+  group_by(Layer) %>% 
+  mutate(POC_mg = sum(total_POC_mg)) %>% 
+  select(Layer, POC_mg) %>% 
+  unique()
+
+#find export flux at 200 m, 400 m and 1000 m 
+# use F(z) = F(z0)* e^-((K*(z-z0))/w) #Banse 1990
+# where F(z) is the flux at depth z, F(z0) is the flux at reference depth, K is remin rate (d-1), w = sinking speed m d-1 and (z-z0) is depth layer
+
+# Define the microbial remineralization rate
+#K <- 0.11 # from Louis work
+K <- 0.16 #average from Bressac et al. 2024
+w <- 8 #Louis work
+
+
+# POC at upper bounds of each depth layer
+POC_Epi <- as.numeric(POC_mg_df[1,"POC_mg"])   # at 50 m
+POC_Umeso <- as.numeric(POC_mg_df[2,"POC_mg"]) # at 200 m
+POC_Lmeso <-  as.numeric(POC_mg_df[3,"POC_mg"]) # at 400 m
+
+# Calculate flux at 200 m (directly from Epi POC)
+F_200 <- POC_Epi * exp(-K*(200-50)/w)
+
+# Calculate flux at 400 m using 200 m as reference
+F_400 <- (F_200 +POC_Umeso) * exp(-K * (400 - 200)/w)
+
+# Calculate flux at 1000 m using 400 m as reference
+F_1000 <- (F_400 + POC_Lmeso) * exp(-K * (1000 - 400)/w)
+
+
+## calculate DIC remineralised (retained) per layer
+
+# Calculate DIC respired in each layer
+DIC_Epi <- POC_Epi - F_200 # we assume all POC sinks below 200 m 
+DIC_Umeso <- (POC_Umeso + F_200) - F_400
+DIC_Lmeso <- (POC_Lmeso + F_400) - F_1000
+
+# Print results
+cat("DIC Respired in Epi layer (0-200 m):", DIC_Epi, "mg\n")
+cat("DIC Respired in Umeso layer (200-400 m):", DIC_Umeso, "mg\n")
+cat("DIC Respired in Lmeso layer (400-1000 m):", DIC_Lmeso, "mg\n")
+
+# Create a dataframe with the remin DIC values
+DIC_remin <- data.frame(
+  Layer = c("Epi", "Umeso", "Lmeso"),
+  DIC_remin = c(DIC_Epi, DIC_Umeso, DIC_Lmeso), 
+  POC_export = c(F_200, F_400, F_1000)
+)
+
+
+```
+
+#combine with DIC injected from respiration
+
+```{r}
+DIC_mg_df <- DIC_injection_resp_df %>% 
+  select(Layer, total_DIC_mg) %>% 
+  group_by(Layer) %>% 
+  mutate(DIC_inject = sum(total_DIC_mg)) %>% 
+  select(Layer, DIC_inject) %>% 
+  unique()
+
+# Add the calculated DIC values to the existing DIC_mg values
+DIC_mg_df <- DIC_mg_df %>%
+  left_join(DIC_remin, by = "Layer") %>%
+  mutate(DIC_mg = DIC_inject + DIC_remin) %>%
+  select(Layer, DIC_inject, DIC_mg) # Keep only necessary columns
+
+# Print updated dataframe
+print(DIC_mg_df)
+
+
+```
+
+
+
+## How much POC sinks below meso?
+
+```{r}
+F_1000
+
+```
+
+
+#plot carbon pools
+
+```{r}
+
+# Ensure the correct stacking order
+DIC_mg_df$Layer <- factor(DIC_mg_df$Layer, levels = c("Epi", "Umeso", "Lmeso"))
+
+# Create a custom blue gradient by replacing the darkest shade
+custom_blue_palette <- function(n) {
+  pal <- viridis_pal(option = "mako")(n) # Generate the mako palette
+  pal[1] <- "#00008B" # Replace the darkest color with a dark blue (hex: DarkBlue)
+  return(rev(pal))
+}
+
+# Create the stacked bar chart with renamed legend labels
+total_DIC_WC <- ggplot(DIC_mg_df, aes(x = "", y = DIC_mg, fill = Layer)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  scale_fill_manual(
+    values = custom_blue_palette(4), # Use the custom blue palette
+    labels = c(
+      "Epi" = "Epipelagic\n0 - 200 m",
+      "Umeso" = "Upper mesopelagic\n200 - 400 m",
+      "Lmeso" = "Lower mesopelagic\n400 - 1000 m"
+    )
+  ) +
+  labs(
+    title = NULL,
+    x = NULL,
+    y = "mg C m-² d⁻¹",
+    fill = "Layer"
+  ) +
+  theme_minimal() +
+  ylim(0,30)+
+  theme(
+    axis.ticks.x = element_blank(),
+    axis.text.x = element_blank(),
+    text = element_text(size = 16),          # Increase overall text size
+    axis.title.y = element_text(size = 18),  # Increase y-axis title size
+    axis.text.y = element_text(size = 14),   # Increase y-axis text size
+    legend.text = element_text(size = 14),   # Increase legend text size
+    legend.title = element_text(size = 16)   # Increase legend title size
+  )
+  
+
+# Save the plot
+ggsave(paste0(output_path,"Fig4_DIC_WC.png"), plot = total_DIC_WC, width = 7, height = 5)
+
+
+```
+
+
+#### make table reflecting new values........
+
+
+```{r}
+
+total_DIC <- left_join(POC_mg_df, DIC_mg_df, by = "Layer")
+total_DIC <- left_join(total_DIC, DIC_remin, by = "Layer")
+
+write.csv(total_DIC, paste0(output_path,"total_DIC_.csv"))
+
+
+```
+
+
+
+#Compare values with chapter 1: remove species where % epi = 0 - also need to remove POC sinking contribution.... 
+
+```{r}
+#POC_injection_df -= POC with no remineralisation
+#DIC_injection_resp_df = respired DIC
+
+
+# Merge DIC_long and POC_DIC_long by Species and layer
+merged_df_no_remin <- left_join(POC_injection_df, DIC_injection_resp_df, by = c("Species", "Layer"))
+
+merged_df_no_remin <- merged_df_no_remin %>%
+  mutate(
+    Total_DIC = POC + DIC,  # Assuming DIC from DIC_to_POC_df is DIC.x and from POC_DIC_long is DIC.y
+  total_DIC_mg = Total_DIC * 1000) %>%   # Convert to milligrams)  
+  select(Species, Layer, total_DIC_mg )
+
+
+merged_df_no_remin <- merged_df_no_remin %>% 
+  mutate(mod_type = "mesomizer")
+
+
+
+# N. achirus, Cyclothone spp, Bathylagus spp, Gymnosomata, atolla wyvillei
+
+df_no_epi <- merged_df_no_remin  %>% 
+  filter(!Species %in% c("Nannobrachium achirus", "Cyclothone spp", "Gymnosomata", "Bathylagus spp", "Atolla wyvillei"))
+
+write.csv(df_no_epi, paste0(output_path,"modeled_DIC_no_epi.csv"))
+
+# Create the horizontal bar plot
+Total_DIC_pools_no_remin <- ggplot(df_no_epi, aes(x = total_DIC_mg , y = Layer, fill = Species)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "DIC (mg C m-2 d-1)", y = "Depth Stratum") +
+  scale_y_discrete(labels = c("Lmeso","Umeso","Epi")) +
+  theme(legend.title = element_blank()) +
+  theme(
+    axis.text = element_text(size = 14),  # Adjust size of axis text
+    axis.title = element_text(size = 16), # Adjust size of axis titles
+    legend.text = element_text(size = 12), # Adjust size of legend text
+    legend.title = element_text(size = 14) # Adjust size of legend title
+  )
+
+
+# Plot the graph
+Total_DIC_pools_no_remin
+
+```
+
+
+
+
+

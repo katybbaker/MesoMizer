@@ -622,8 +622,7 @@ plotEnergyBudget(params_v1)
 ## 1. convert length to weight
 
 ```{r}
-# # from Ezekiel_ESS code
-# 
+
 # # Step 1: Extract lower and upper bounds of each bin
 # 
 # Biomass_size <- Biomass_size %>%
@@ -909,6 +908,8 @@ ggplot(Percentage_depth, aes(x = percent_depth, y = Depth_Stratum)) +
 #### 1a. Get metabolic rates per species & size
 
 ```{r}
+params_v1<-params_fished2
+
 #Get metabolic rate per species and size (g m-2 y-1)
 metabolic_rates <- metab(params_v1)
 
@@ -1322,6 +1323,8 @@ head(combined_df)
 
 ```{r}
 
+vertical_migration_array<-params_v1@other_params$other$vertical_migration
+
 # Convert vertical_migration_array to a dataframe
 vertical_migration_df <- as.data.frame(vertical_migration_array)
 
@@ -1607,7 +1610,7 @@ combined_plot <- DIC_injection_highertaxa_p + POC_injection_highertaxa_p +
 # Display the combined plot
 combined_plot
 
-ggsave("Fig3_DIC_POC.png", plot = combined_plot, width = 7, height = 5)
+ggsave("Fig3_DIC_POC_FISHED2.png", plot = combined_plot, width = 7, height = 5)
 
 ```
 
@@ -1688,7 +1691,7 @@ combined_plot <- DIC_injection_highertaxa_p + POC_injection_highertaxa_p +
   plot_layout(guides = "collect", ncol = 2) &
   theme(legend.position = "bottom")
 
-ggsave("Fig3_DIC_POC.png", plot = combined_plot, width = 7, height = 5)
+ggsave("Fig3_DIC_POC_FISHED2.png", plot = combined_plot, width = 7, height = 5)
 
 ```
 
@@ -1828,7 +1831,7 @@ total_DIC_WC <- ggplot(DIC_mg_df, aes(x = "", y = DIC_mg, fill = Layer)) +
   
 
 # Save the plot
-ggsave("Fig4_DIC_WC.png", plot = total_DIC_WC, width = 7, height = 5)
+ggsave("Fig4_DIC_WC_FISHED2.png", plot = total_DIC_WC, width = 7, height = 5)
 
 
 ```

@@ -7,9 +7,9 @@ library(patchwork)
 rm(list =ls()) # clear memory
 
 #Biomass size data cleaning
-bio_size <- read.csv("SOLACE_biomass_filtered.csv") 
-bio_mean_wc <- read.csv("Biomass_av_wc.csv")
-w_subsample <- read.csv("W_subsample.csv")
+bio_size <- read.csv("~/Library/CloudStorage/OneDrive-UniversityofTasmania/MesoMizer/MesoMizer/SOLACE_biomass_filtered.csv") 
+bio_mean_wc <- read.csv("~/Library/CloudStorage/OneDrive-UniversityofTasmania/MesoMizer/MesoMizer/Biomass_av_wc.csv")
+w_subsample <- read.csv("~/Library/CloudStorage/OneDrive-UniversityofTasmania/MesoMizer/MesoMizer/W_subsample.csv")
 
 bio_size <- bio_size %>%
   mutate(Taxa_updated = if_else(Taxa_updated == "Thysannoessa macura", "Thysanoessa macrura", Taxa_updated))
@@ -116,7 +116,7 @@ levels(bio_size$species)
 
 # read params
 
-params_v1<-readRDS("params_v1.rds") 
+params_v1<-readRDS("~/Library/CloudStorage/OneDrive-UniversityofTasmania/MesoMizer/MesoMizer/params_v1.rds") 
 
 
 species_params(params_v1)$species
